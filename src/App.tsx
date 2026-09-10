@@ -29,6 +29,8 @@ import {
   subscribeToFirebase,
   fetchFirebaseRootRest,
   loadAllMovies,
+  loadAllEvents,
+  loadRemoteChannelsFromConfig,
   UPDATE_CHANNEL_M3U_URL,
   FIREBASE_DB_URL,
   FirebaseSyncedData,
@@ -109,6 +111,13 @@ export default function App() {
     // 1. Initial fetch of Update Channel M3U
     loadRemoteM3uChannels();
 
+    // Load initial events
+    loadAllEvents(INITIAL_EVENTS).then((loadedEvents) => {
+      if (loadedEvents && loadedEvents.length > 0) {
+        setEvents(loadedEvents);
+      }
+    });
+
     // Load initial movies including remote JSON playlists (Kolkata serial, Bangla movies, etc.)
     loadAllMovies(INITIAL_MOVIES).then((loaded) => {
       if (loaded && loaded.length > 0) {
@@ -118,15 +127,40 @@ export default function App() {
 
     // 2. Subscribe to Firebase Realtime Database
     const unsubscribe = subscribeToFirebase((syncedData: Partial<FirebaseSyncedData>) => {
-      if (syncedData.events && syncedData.events.length > 0) {
-        setEvents(syncedData.events);
-      }
+      // Load both direct Firebase events and sports event sources in app_config.sportsM3uUrl
+      loadAllEvents(syncedData.events || INITIAL_EVENTS, syncedData.sportsConfigUrl).then((allEvents) => {
+        if (allEvents && allEvents.length > 0) {
+          setEvents(allEvents);
+        }
+      });
+
       // Load both direct Firebase movies and JSON playlists specified in app_config.moviesM3uUrl
       loadAllMovies(syncedData.movies || [], syncedData.moviesConfigUrl).then((allMovies) => {
         if (allMovies && allMovies.length > 0) {
           setMovies(allMovies);
         }
       });
+
+      // Load additional live TV channels from app_config.liveTvM3uUrl if present
+      if (syncedData.liveTvConfigUrl) {
+        loadRemoteChannelsFromConfig(syncedData.liveTvConfigUrl).then((remoteChannels) => {
+          if (remoteChannels && remoteChannels.length > 0) {
+            setM3uChannels((prev) => {
+              const seen = new Set<string>(prev.map((c) => `${c.name.toLowerCase()}_${c.url}`));
+              const merged = [...prev];
+              remoteChannels.forEach((c) => {
+                const k = `${c.name.toLowerCase()}_${c.url}`;
+                if (!seen.has(k)) {
+                  seen.add(k);
+                  merged.push(c);
+                }
+              });
+              return merged;
+            });
+          }
+        });
+      }
+
       if (syncedData.playlists && syncedData.playlists.length > 0) {
         setPlaylists(syncedData.playlists);
       }

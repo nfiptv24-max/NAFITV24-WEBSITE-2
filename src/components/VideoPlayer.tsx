@@ -115,9 +115,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       const isPageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const isHttp = trimmed.startsWith('http://');
+      const isAstraOrRestricted =
+        trimmed.includes('/play/') ||
+        trimmed.includes('?hls') ||
+        trimmed.includes('|') ||
+        trimmed.includes('rumsport') ||
+        trimmed.includes('jagobd') ||
+        trimmed.includes('share.google');
 
-      // If page is HTTPS and stream is HTTP, browser strictly blocks it without proxy
-      if (forceProxy || (isPageHttps && isHttp)) {
+      // If page is HTTPS and stream is HTTP, or restricted stream, route through proxy
+      if (forceProxy || (isPageHttps && isHttp) || isAstraOrRestricted) {
         setIsProxied(true);
         return `/api/proxy?url=${encodeURIComponent(trimmed)}`;
       }
@@ -161,7 +168,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     const isPageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     const isHttp = streamUrl.startsWith('http://');
-    const shouldUseProxy = isPageHttps && isHttp;
+    const isAstraOrRestricted =
+      streamUrl.includes('/play/') ||
+      streamUrl.includes('?hls') ||
+      streamUrl.includes('|') ||
+      streamUrl.includes('rumsport') ||
+      streamUrl.includes('jagobd') ||
+      streamUrl.includes('share.google');
+    const shouldUseProxy = (isPageHttps && isHttp) || isAstraOrRestricted;
 
     loadStreamSource(streamUrl, shouldUseProxy);
 
@@ -194,11 +208,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         backBufferLength: 60,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        fragLoadingMaxRetry: 5,
-        manifestLoadingMaxRetry: 5,
-        levelLoadingMaxRetry: 5,
-        fragLoadingRetryDelay: 1000,
-        manifestLoadingRetryDelay: 1000,
+        fragLoadingMaxRetry: 8,
+        manifestLoadingMaxRetry: 8,
+        levelLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 800,
+        manifestLoadingRetryDelay: 800,
         xhrSetup: (xhr) => {
           xhr.withCredentials = false;
         }
@@ -214,6 +228,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         setTimeout(() => setStatus(null), 1500);
       });
 
+      let networkRetryCount = 0;
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
           switch (data.type) {
@@ -228,16 +243,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 });
                 setTimeout(() => {
                   loadStreamSource(rawUrl, true);
-                }, 800);
+                }, 600);
+                return;
+              }
+
+              networkRetryCount++;
+              if (networkRetryCount <= 4) {
+                hls.startLoad();
                 return;
               }
 
               setStatus({
                 type: 'error',
-                text: 'নেটওয়ার্ক সংযোগ ত্রুটি',
-                subText: 'সার্ভার পরিবর্তন বা রিট্রাই করা হচ্ছে...'
+                text: 'সার্ভার সংযোগ সমস্যা',
+                subText: onFailover ? 'বিকল্প সার্ভারে পরিবর্তন করা হচ্ছে...' : 'পুনরায় চেষ্টা করা হচ্ছে...'
               });
-              hls.startLoad();
+              if (onFailover) {
+                setTimeout(onFailover, 1800);
+              } else {
+                setTimeout(() => {
+                  networkRetryCount = 0;
+                  hls.startLoad();
+                }, 2500);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();

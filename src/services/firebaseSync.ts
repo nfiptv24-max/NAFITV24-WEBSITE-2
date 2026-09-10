@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue, off, DataSnapshot } from 'firebase/database';
 import { Channel, LiveEvent, Movie, Playlist, StreamServer } from '../types';
 import { DEFAULT_LOGO, DEFAULT_POSTER } from '../data/defaultData';
+import { parseM3U } from '../utils/streamUtils';
 
 export const FIREBASE_DB_URL = 'https://nafitv24-live-default-rtdb.firebaseio.com';
 export const UPDATE_CHANNEL_M3U_URL = 'https://raw.githubusercontent.com/nafitv24-web/NAFI-TV/refs/heads/main/Update%20Channel.m3u';
@@ -15,6 +16,8 @@ export interface FirebaseSyncedData {
   activeUsersCount: number;
   totalUsersCount: number;
   moviesConfigUrl?: string;
+  sportsConfigUrl?: string;
+  liveTvConfigUrl?: string;
   isConnected: boolean;
   lastSyncedAt: Date | null;
 }
@@ -213,6 +216,213 @@ export async function fetchRemoteMovieJsonPlaylists(urlsString?: string): Promis
   return allMovies;
 }
 
+// Fetch remote sports playlists and JSON event sources (matches, tournaments, streams)
+export async function fetchRemoteSportsPlaylists(sportsConfigUrl?: string): Promise<LiveEvent[]> {
+  const allEvents: LiveEvent[] = [];
+  if (!sportsConfigUrl) return allEvents;
+
+  const urls = sportsConfigUrl
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('http://') || s.startsWith('https://'));
+
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      const trimmed = text.trim();
+
+      // 1. JSON Sports Event Formats (Matches, matches, live_matches, upcoming_matches)
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        const json = JSON.parse(trimmed);
+        const list =
+          json.Matches ||
+          json.matches ||
+          json.live_matches ||
+          json.upcoming_matches ||
+          (Array.isArray(json) ? json : []);
+
+        if (Array.isArray(list)) {
+          list.forEach((item: any, idx: number) => {
+            const title =
+              item.title ||
+              item.name ||
+              (item.localteam_name && item.visitorteam_name
+                ? `${item.localteam_name} vs ${item.visitorteam_name}`
+                : `Sports Event ${idx + 1}`);
+
+            // Servers extraction
+            const servers: StreamServer[] = [];
+            if (Array.isArray(item.link_live)) {
+              item.link_live.forEach((l: any, lIdx: number) => {
+                const sUrl = l.stream_link || l.videoURL;
+                if (sUrl && typeof sUrl === 'string' && sUrl.trim()) {
+                  servers.push({
+                    name: l.display_name || `Server ${lIdx + 1}`,
+                    url: sUrl.trim(),
+                  });
+                }
+              });
+            }
+            if (item.stream_url_alpha && typeof item.stream_url_alpha === 'object') {
+              Object.entries(item.stream_url_alpha).forEach(([sName, sUrl]) => {
+                if (typeof sUrl === 'string' && sUrl.trim()) {
+                  servers.push({ name: sName, url: sUrl.trim() });
+                }
+              });
+            }
+            if (item.stream_url_bravo && typeof item.stream_url_bravo === 'object') {
+              Object.entries(item.stream_url_bravo).forEach(([sName, sUrl]) => {
+                if (typeof sUrl === 'string' && sUrl.trim()) {
+                  servers.push({ name: sName, url: sUrl.trim() });
+                }
+              });
+            }
+            if (Array.isArray(item.servers)) {
+              servers.push(...normalizeServers(item.servers, ''));
+            }
+
+            const mainUrl =
+              servers[0]?.url ||
+              item.stream_url ||
+              item.url ||
+              item.videoURL ||
+              item.stream_link ||
+              '';
+
+            if (mainUrl) {
+              if (servers.length === 0) {
+                servers.push({ name: 'Live Stream', url: mainUrl });
+              }
+
+              const logo =
+                item.cover_image ||
+                item.league_logo ||
+                item.logo ||
+                item.poster ||
+                item.localteam_logo ||
+                DEFAULT_POSTER;
+
+              const team1Name =
+                item.localteam_name ||
+                item.team1?.name ||
+                (typeof item.team1 === 'string' ? item.team1 : title);
+              const team1Logo =
+                item.localteam_logo || item.team1?.logo || item.team1Logo || logo;
+              const team2Name =
+                item.visitorteam_name ||
+                item.team2?.name ||
+                (typeof item.team2 === 'string' ? item.team2 : 'Opponent');
+              const team2Logo =
+                item.visitorteam_logo || item.team2?.logo || item.team2Logo || logo;
+
+              let startTime = Date.now();
+              if (item.timestamp && !isNaN(Number(item.timestamp))) {
+                startTime = Number(item.timestamp) * 1000;
+              } else if (item.start_at && !isNaN(Number(item.start_at))) {
+                startTime = Number(item.start_at) * 1000;
+              }
+
+              const isLive =
+                item.status === 'LIVE' ||
+                item.is_playing === true ||
+                (typeof item.status === 'string' &&
+                  item.status.toLowerCase().includes('live'));
+
+              allEvents.push({
+                id: `sports_${idx}_${Date.now()}`,
+                name: title,
+                sport:
+                  item.sport || item.category || item.league_name || 'Live Sports',
+                status: isLive ? 'Live' : 'Upcoming',
+                tournament:
+                  item.league_name ||
+                  item.tournament ||
+                  item.category ||
+                  'Live Sports',
+                team1: { name: team1Name, logo: team1Logo },
+                team2: { name: team2Name, logo: team2Logo },
+                startTime,
+                logo,
+                url: mainUrl,
+                servers,
+              });
+            }
+          });
+        }
+      } else if (trimmed.includes('#EXTINF')) {
+        // 2. M3U Sports Playlist format
+        const lines = trimmed.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (line.startsWith('#EXTINF:')) {
+            const nextLine = lines[i + 1]?.trim();
+            if (
+              nextLine &&
+              !nextLine.startsWith('#') &&
+              (nextLine.startsWith('http://') || nextLine.startsWith('https://'))
+            ) {
+              const nameMatch = line.match(/,(.+)$/);
+              const title = nameMatch ? nameMatch[1].trim() : 'Live Sports Stream';
+              const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+              const logo = logoMatch ? logoMatch[1] : DEFAULT_POSTER;
+              const groupMatch = line.match(/group-title="([^"]+)"/);
+              const sport = groupMatch ? groupMatch[1] : 'Live Sports';
+
+              allEvents.push({
+                id: `m3u_sports_${i}`,
+                name: title,
+                sport,
+                status: 'Live',
+                tournament: sport,
+                team1: { name: title, logo },
+                team2: { name: 'Live Stream', logo },
+                startTime: Date.now(),
+                logo,
+                url: nextLine,
+                servers: [{ name: 'Server 1', url: nextLine }],
+              });
+              i++; // skip nextLine
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching sports playlist:', url, err);
+    }
+  }
+
+  return allEvents;
+}
+
+// Fetch remote channels from liveTvM3uUrl configuration
+export async function loadRemoteChannelsFromConfig(
+  liveTvConfigUrl?: string
+): Promise<Channel[]> {
+  const allChannels: Channel[] = [];
+  if (!liveTvConfigUrl) return allChannels;
+
+  const urls = liveTvConfigUrl
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('http://') || s.startsWith('https://'));
+
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      const parsed = parseM3U(text);
+      allChannels.push(...parsed);
+    } catch (err) {
+      console.warn('Error fetching live tv m3u from config:', url, err);
+    }
+  }
+
+  return allChannels;
+}
+
 // Normalize Playlists from Firebase Realtime DB
 export function normalizePlaylist(key: string, item: any): Playlist {
   return {
@@ -229,17 +439,30 @@ export function parseFirebasePayload(data: any): Partial<FirebaseSyncedData> {
 
   const result: Partial<FirebaseSyncedData> = {};
 
-  // 1. Events / Sports / Matches
-  const rawSports = data.sports || data.matches || data.events || {};
-  if (rawSports && typeof rawSports === 'object') {
-    const list: LiveEvent[] = [];
-    Object.keys(rawSports).forEach((key) => {
-      const item = rawSports[key];
-      if (item && typeof item === 'object') {
-        list.push(normalizeEvent(key, item));
-      }
-    });
-    if (list.length > 0) result.events = list;
+  // 1. Events / Sports / Matches from all active Firebase nodes
+  const eventMap = new Map<string, LiveEvent>();
+  const collectEvents = (container: any) => {
+    if (container && typeof container === 'object') {
+      Object.keys(container).forEach((key) => {
+        const item = container[key];
+        if (item && typeof item === 'object') {
+          const ev = normalizeEvent(key, item);
+          if (ev.name) {
+            eventMap.set(ev.name.trim().toLowerCase(), ev);
+          }
+        }
+      });
+    }
+  };
+
+  collectEvents(data.sports);
+  collectEvents(data.matches);
+  collectEvents(data.events);
+  collectEvents(data.live_events);
+  collectEvents(data.sports_events);
+
+  if (eventMap.size > 0) {
+    result.events = Array.from(eventMap.values());
   }
 
   // 2. Movies
@@ -299,15 +522,56 @@ export function parseFirebasePayload(data: any): Partial<FirebaseSyncedData> {
     result.totalUsersCount = Object.keys(data.all_users).length;
   }
 
-  // 7. Movies Config in app_config
+  // 7. Config URLs in app_config
   if (data.app_config?.moviesM3uUrl) {
     result.moviesConfigUrl = data.app_config.moviesM3uUrl;
+  }
+  if (data.app_config?.sportsM3uUrl) {
+    result.sportsConfigUrl = data.app_config.sportsM3uUrl;
+  }
+  if (data.app_config?.liveTvM3uUrl) {
+    result.liveTvConfigUrl = data.app_config.liveTvM3uUrl;
   }
 
   result.lastSyncedAt = new Date();
   result.isConnected = true;
 
   return result;
+}
+
+// Combine and deduplicate events from direct Firebase and remote sports playlists
+export async function loadAllEvents(
+  fbEvents: LiveEvent[] = [],
+  sportsConfigUrl?: string
+): Promise<LiveEvent[]> {
+  try {
+    const remoteEvents = await fetchRemoteSportsPlaylists(sportsConfigUrl);
+    const seen = new Set<string>();
+    const combined: LiveEvent[] = [];
+
+    // Prioritize direct Firebase events
+    fbEvents.forEach((ev) => {
+      const key = (ev.name || '').trim().toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        combined.push(ev);
+      }
+    });
+
+    // Then parsed remote events
+    remoteEvents.forEach((ev) => {
+      const key = (ev.name || '').trim().toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        combined.push(ev);
+      }
+    });
+
+    return combined.length > 0 ? combined : fbEvents;
+  } catch (err) {
+    console.warn('Error loading all events:', err);
+    return fbEvents;
+  }
 }
 
 // Combine and deduplicate movies from direct Firebase and remote JSON playlists

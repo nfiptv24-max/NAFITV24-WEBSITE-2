@@ -8,6 +8,8 @@ interface HeaderProps {
   onSetAppMode: (mode: AppMode) => void;
   onOpenNetlifyGuide: () => void;
   onRefreshData: () => void;
+  isFirebaseConnected?: boolean;
+  activeUsersCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSetAppMode,
   onOpenNetlifyGuide,
   onRefreshData,
+  isFirebaseConnected = true,
+  activeUsersCount = 0,
 }) => {
   const getTabTitle = () => {
     switch (currentTab) {
@@ -44,8 +48,13 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
               <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Netlify Ready
+                Firebase Live
               </span>
+              {activeUsersCount > 0 && (
+                <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/25">
+                  {activeUsersCount} অনলাইন
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 truncate max-w-[180px] sm:max-w-xs">
               {getTabTitle()}

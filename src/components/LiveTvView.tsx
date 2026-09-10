@@ -8,6 +8,7 @@ interface LiveTvViewProps {
   currentChannelUrl?: string;
   onSelectChannel: (channel: Channel, index: number) => void;
   onReloadChannels: () => void;
+  isLoading?: boolean;
 }
 
 export const LiveTvView: React.FC<LiveTvViewProps> = ({
@@ -15,6 +16,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = ({
   currentChannelUrl,
   onSelectChannel,
   onReloadChannels,
+  isLoading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -55,14 +57,19 @@ export const LiveTvView: React.FC<LiveTvViewProps> = ({
 
         {/* Counter & Reload */}
         <div className="flex items-center justify-between sm:justify-end gap-2 text-xs text-slate-400">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Update Channel.m3u
+          </span>
           <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-sky-400 border border-blue-500/20 font-semibold">
             {channels.length} টি চ্যানেল
           </span>
           <button
             onClick={onReloadChannels}
-            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
+            disabled={isLoading}
+            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer disabled:opacity-50"
           >
-            রিলোড
+            {isLoading ? 'লোড হচ্ছে...' : 'রিলোড'}
           </button>
         </div>
       </div>

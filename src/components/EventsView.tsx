@@ -21,7 +21,7 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
     return () => clearInterval(timer);
   }, []);
 
-  const sports = ['All', 'Cricket', 'Football'];
+  const sports = ['All', ...Array.from(new Set(events.map((e) => e.sport || 'Cricket')))];
   const statuses = ['All', 'Live', 'Upcoming'];
 
   const filteredEvents = events.filter((ev) => {
@@ -109,9 +109,9 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
 
                 {/* Top info bar */}
                 <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-white/5">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-500/10 text-sky-400 border border-blue-500/20">
-                    <Trophy className="w-3 h-3 text-sky-400" />
-                    {ev.tournament}
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-500/10 text-sky-400 border border-blue-500/20 truncate max-w-[200px] sm:max-w-xs">
+                    <Trophy className="w-3 h-3 text-sky-400 shrink-0" />
+                    <span className="truncate">{ev.name || ev.tournament}</span>
                   </span>
 
                   {isLive ? (

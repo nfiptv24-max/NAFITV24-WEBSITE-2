@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
+import { MarqueeBanner } from './components/MarqueeBanner';
 import { VideoPlayer } from './components/VideoPlayer';
 import { EventsView } from './components/EventsView';
 import { LiveTvView } from './components/LiveTvView';
@@ -25,6 +26,13 @@ import {
   DEFAULT_LOGO,
 } from './data/defaultData';
 import { parseM3U } from './utils/streamUtils';
+import {
+  subscribeToFirebase,
+  fetchFirebaseRootRest,
+  UPDATE_CHANNEL_M3U_URL,
+  FIREBASE_DB_URL,
+  FirebaseSyncedData,
+} from './services/firebaseSync';
 
 export default function App() {
   // App settings & view state
@@ -32,12 +40,21 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<TabView>('events');
   const [isNetlifyGuideOpen, setIsNetlifyGuideOpen] = useState(false);
 
-  // Content Data
-  const [channels, setChannels] = useState<Channel[]>(FALLBACK_CHANNELS);
+  // Content Data State
+  const [m3uChannels, setM3uChannels] = useState<Channel[]>([]);
+  const [firebaseChannels, setFirebaseChannels] = useState<Channel[]>([]);
   const [events, setEvents] = useState<LiveEvent[]>(INITIAL_EVENTS);
-  const [movies] = useState<Movie[]>(INITIAL_MOVIES);
-  const [playlists] = useState<Playlist[]>(INITIAL_PLAYLISTS);
+  const [movies, setMovies] = useState<Movie[]>(INITIAL_MOVIES);
+  const [playlists, setPlaylists] = useState<Playlist[]>(INITIAL_PLAYLISTS);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
+
+  // Firebase Realtime Metadata State
+  const [marqueeNews, setMarqueeNews] = useState<string>(
+    'NAFI TV 24 এ ক্রিকেট, ফুটবল ও লাইভ টিভি চ্যানেল মুভি সিরিজ উপভোগ করুন।'
+  );
+  const [activeUsersCount, setActiveUsersCount] = useState<number>(4);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
   // Active Streaming Media State
   const [activeMedia, setActiveMedia] = useState<{
@@ -61,6 +78,26 @@ export default function App() {
     }, 2800);
   }, []);
 
+  // Combined channels: Firebase admin-added channels first, then M3U playlist channels
+  const channels = useMemo(() => {
+    if (firebaseChannels.length === 0 && m3uChannels.length === 0) {
+      return FALLBACK_CHANNELS;
+    }
+    // Deduplicate by name & url
+    const seen = new Set<string>();
+    const list: Channel[] = [];
+
+    [...firebaseChannels, ...m3uChannels].forEach((ch) => {
+      const key = `${ch.name.toLowerCase()}_${ch.url}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(ch);
+      }
+    });
+
+    return list.length > 0 ? list : FALLBACK_CHANNELS;
+  }, [firebaseChannels, m3uChannels]);
+
   // Mode persistence & initial loading
   useEffect(() => {
     try {
@@ -70,8 +107,37 @@ export default function App() {
       }
     } catch (_) {}
 
-    // Initial fetch of public M3U channels
+    // 1. Initial fetch of Update Channel M3U
     loadRemoteM3uChannels();
+
+    // 2. Subscribe to Firebase Realtime Database
+    const unsubscribe = subscribeToFirebase((syncedData: Partial<FirebaseSyncedData>) => {
+      if (syncedData.events && syncedData.events.length > 0) {
+        setEvents(syncedData.events);
+      }
+      if (syncedData.movies && syncedData.movies.length > 0) {
+        setMovies(syncedData.movies);
+      }
+      if (syncedData.playlists && syncedData.playlists.length > 0) {
+        setPlaylists(syncedData.playlists);
+      }
+      if (syncedData.channels && syncedData.channels.length > 0) {
+        setFirebaseChannels(syncedData.channels);
+      }
+      if (syncedData.marqueeNews) {
+        setMarqueeNews(syncedData.marqueeNews);
+      }
+      if (typeof syncedData.activeUsersCount === 'number') {
+        setActiveUsersCount(syncedData.activeUsersCount);
+      }
+      if (typeof syncedData.isConnected === 'boolean') {
+        setIsFirebaseConnected(syncedData.isConnected);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleSetAppMode = (mode: AppMode) => {
@@ -82,12 +148,13 @@ export default function App() {
     showToast(mode === 'tv' ? '📺 TV মোড চালু হয়েছে' : '📱 মোবাইল মোড চালু হয়েছে');
   };
 
-  // Fetch channels from M3U list with fallback
+  // Fetch channels from M3U list (starting with Update Channel.m3u)
   const loadRemoteM3uChannels = async () => {
+    setIsLoadingChannels(true);
     for (const src of M3U_SOURCES) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         const resp = await fetch(src, { signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -95,13 +162,15 @@ export default function App() {
         const text = await resp.text();
         const parsed = parseM3U(text);
         if (parsed.length > 0) {
-          setChannels(parsed);
+          setM3uChannels(parsed);
+          setIsLoadingChannels(false);
           return;
         }
       } catch (_) {
         continue;
       }
     }
+    setIsLoadingChannels(false);
   };
 
   // Play a specific channel
@@ -153,7 +222,7 @@ export default function App() {
     setIsLoadingPlaylist(true);
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       const resp = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
 
@@ -161,7 +230,7 @@ export default function App() {
       const text = await resp.text();
       const parsed = parseM3U(text);
       if (parsed.length > 0) {
-        setChannels(parsed);
+        setM3uChannels(parsed);
         setCurrentTab('live-tv');
         showToast(`✅ ${parsed.length} টি চ্যানেল লোড হয়েছে (${title})`);
       } else {
@@ -201,9 +270,21 @@ export default function App() {
     showToast('সার্ভার পরিবর্তন করা হয়েছে');
   };
 
-  const handleRefreshData = () => {
+  const handleRefreshData = async () => {
+    showToast('🔄 ডাটা ও চ্যানেল রিফ্রেশ হচ্ছে...');
     loadRemoteM3uChannels();
-    showToast('🔄 চ্যানেল ও ডাটা রিফ্রেশ করা হয়েছে');
+    const updated = await fetchFirebaseRootRest();
+    if (updated) {
+      if (updated.events) setEvents(updated.events);
+      if (updated.movies) setMovies(updated.movies);
+      if (updated.playlists) setPlaylists(updated.playlists);
+      if (updated.channels) setFirebaseChannels(updated.channels);
+      if (updated.marqueeNews) setMarqueeNews(updated.marqueeNews);
+      if (typeof updated.activeUsersCount === 'number') {
+        setActiveUsersCount(updated.activeUsersCount);
+      }
+    }
+    showToast('✅ Firebase ও M3U চ্যানেল রিফ্রেশ সম্পন্ন');
   };
 
   return (
@@ -215,6 +296,15 @@ export default function App() {
         onSetAppMode={handleSetAppMode}
         onOpenNetlifyGuide={() => setIsNetlifyGuideOpen(true)}
         onRefreshData={handleRefreshData}
+        isFirebaseConnected={isFirebaseConnected}
+        activeUsersCount={activeUsersCount}
+      />
+
+      {/* Marquee Notice Banner from Firebase */}
+      <MarqueeBanner
+        news={marqueeNews}
+        activeUsers={activeUsersCount}
+        isConnected={isFirebaseConnected}
       />
 
       {/* Main Content Area */}
@@ -245,6 +335,7 @@ export default function App() {
             currentChannelUrl={activeMedia?.url}
             onSelectChannel={handleSelectChannel}
             onReloadChannels={handleRefreshData}
+            isLoading={isLoadingChannels}
           />
         )}
 

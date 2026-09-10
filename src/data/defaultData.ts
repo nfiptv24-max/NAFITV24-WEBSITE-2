@@ -4,6 +4,7 @@ export const DEFAULT_LOGO = "https://cdn-icons-png.flaticon.com/512/716/716429.p
 export const DEFAULT_POSTER = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80";
 
 export const M3U_SOURCES = [
+  'https://raw.githubusercontent.com/nafitv24-web/NAFI-TV/refs/heads/main/Update%20Channel.m3u',
   'https://raw.githubusercontent.com/nfiptv24-max/NAFITV/refs/heads/main/Nafitv24.m3u',
   'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/22.m3u',
   'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/14.m3u',

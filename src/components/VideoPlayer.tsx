@@ -99,15 +99,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const ytEmbedUrl = getYouTubeEmbedUrl(streamUrl);
 
   // Auto-hide controls
-  const resetControlsTimer = useCallback(() => {
-    setShowControls(true);
+  const startAutoHideTimer = useCallback(() => {
     if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
-    if (isPlaying) {
-      hideControlsTimer.current = setTimeout(() => {
-        setShowControls(false);
-      }, 4000);
+    hideControlsTimer.current = setTimeout(() => {
+      setShowControls(false);
+    }, 4000);
+  }, []);
+
+  // Toggle controls on screen tap/click: if open -> hide immediately; if closed -> show and start auto-hide
+  const handleToggleControls = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      const target = e.target as HTMLElement;
+      if (target && target.closest && target.closest('button, input, select, a, [role="button"]')) {
+        return;
+      }
     }
-  }, [isPlaying]);
+    setShowControls((prev) => {
+      const next = !prev;
+      if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+      if (next) {
+        startAutoHideTimer();
+      }
+      return next;
+    });
+  }, [startAutoHideTimer]);
+
+  // When mouse moves on desktop, reveal controls and reset timer
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+    startAutoHideTimer();
+  }, [startAutoHideTimer]);
+
+  const resetControlsTimer = handleMouseMove;
+
+  // Auto-hide controls when video starts playing
+  useEffect(() => {
+    if (isPlaying && showControls) {
+      startAutoHideTimer();
+    }
+  }, [isPlaying, showControls, startAutoHideTimer]);
 
   // Clean up HLS instance
   const cleanupHls = useCallback(() => {
@@ -698,8 +728,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div
       ref={containerRef}
-      onMouseMove={resetControlsTimer}
-      onTouchStart={resetControlsTimer}
+      onMouseMove={handleMouseMove}
       style={containerStyle}
       className={`relative w-full bg-black overflow-hidden select-none transition-all ${
         isFullscreen || shouldApplyCssRotation
@@ -714,6 +743,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             ? 'h-full w-full flex items-center justify-center'
             : 'pt-[56.25%]'
         }`}
+        onClick={handleToggleControls}
       >
         {ytEmbedUrl ? (
           <iframe
@@ -729,9 +759,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             playsInline
             autoPlay
             crossOrigin="anonymous"
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full cursor-pointer"
             style={{ objectFit: zoomMode }}
-            onClick={togglePlay}
+            onClick={handleToggleControls}
+            onDoubleClick={togglePlay}
           />
         )}
 
@@ -771,6 +802,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           className={`absolute top-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between gap-3 z-30 transition-opacity duration-300 ${
             showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Close Button & Channel Name */}
           <div className="flex items-center gap-3 min-w-0">

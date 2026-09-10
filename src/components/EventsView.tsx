@@ -149,38 +149,19 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
                 className="group relative p-3 sm:p-3.5 rounded-2xl bg-[#0c1220] hover:bg-[#0f172a] border border-slate-800/80 hover:border-blue-500/40 shadow-xl transition-all overflow-hidden"
               >
                 <div className="flex flex-row items-stretch gap-3 sm:gap-4">
-                  {/* Left Column: Match Thumbnail & Tournament Pill */}
-                  <div className="w-28 sm:w-32 shrink-0 flex flex-col justify-between">
-                    {/* Visual Matchup Banner (UEFA / Sports style) */}
-                    <div className="w-full h-[74px] sm:h-20 rounded-xl overflow-hidden relative flex items-center justify-around px-2 py-1.5 bg-gradient-to-tr from-[#0b1437] via-[#111c47] to-[#1d1b54] border border-blue-500/30 shadow-inner">
-                      {/* Background stadium subtle pattern / stars */}
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.2)_0%,_transparent_70%)] pointer-events-none"></div>
+                  {/* Left Column: Single Match/Channel Logo & Tournament Pill */}
+                  <div className="w-24 sm:w-28 shrink-0 flex flex-col justify-between">
+                    {/* Single Event Channel Logo */}
+                    <div className="w-full h-[74px] sm:h-20 rounded-xl overflow-hidden relative flex items-center justify-center p-2 bg-gradient-to-tr from-[#0b1437] via-[#111c47] to-[#1d1b54] border border-blue-500/30 shadow-inner group-hover:border-sky-400/50 transition-colors">
+                      {/* Radial glow */}
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.25)_0%,_transparent_70%)] pointer-events-none"></div>
 
-                      {/* Team 1 Logo */}
-                      <div className="relative z-10 w-8 h-8 rounded-full bg-white/10 p-1 flex items-center justify-center shadow-md shrink-0">
+                      {/* Single prominent logo */}
+                      <div className="relative z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-white/10 backdrop-blur-sm p-1.5 flex items-center justify-center shadow-lg border border-white/15">
                         <img
-                          src={ev.team1.logo}
-                          alt={ev.team1.name}
-                          className="w-full h-full object-contain rounded-full"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = DEFAULT_LOGO;
-                          }}
-                        />
-                      </div>
-
-                      {/* Center VS info */}
-                      <div className="relative z-10 flex flex-col items-center justify-center">
-                        <span className="text-[9px] font-black text-slate-200 uppercase tracking-tight bg-black/40 px-1 py-0.5 rounded border border-white/10 shadow-sm">
-                          VS
-                        </span>
-                      </div>
-
-                      {/* Team 2 Logo */}
-                      <div className="relative z-10 w-8 h-8 rounded-full bg-white/10 p-1 flex items-center justify-center shadow-md shrink-0">
-                        <img
-                          src={ev.team2.logo}
-                          alt={ev.team2.name}
-                          className="w-full h-full object-contain rounded-full"
+                          src={ev.logo || ev.banner || ev.team1?.logo || DEFAULT_LOGO}
+                          alt={ev.name || ev.tournament}
+                          className="w-full h-full object-contain rounded-lg drop-shadow"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src = DEFAULT_LOGO;
                           }}

@@ -3,6 +3,16 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+
+# Stream Proxy endpoint redirect to Netlify Function
+[[redirects]]
+  from = "/api/proxy"
+  to = "/.netlify/functions/proxy"
+  status = 200
+  force = true
+
 # Single Page Application (SPA) redirect rule
 # Ensures all routes redirect to index.html without 404
 [[redirects]]

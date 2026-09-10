@@ -301,16 +301,67 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       let networkRetryCount = 0;
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        // If manifest error, it could be a direct media stream wrongly detected as HLS
+        // Handle manifest parsing or loading errors
         if (data.details === 'manifestParsingError' || data.details === 'manifestLoadError') {
-          console.warn('HLS manifest error, falling back to native HTML5 video player:', data.details);
-          cleanupHls();
-          setStreamFormat(isDirectMedia ? 'Direct' : 'MP4');
-          if (video) {
+          console.warn('HLS manifest error:', data.details, 'useProxy:', useProxy);
+
+          // If proxy failed, try direct connection
+          if (useProxy && !hasTriedProxy) {
+            setHasTriedProxy(true);
+            setStatus({
+              type: 'loading',
+              text: 'সরাসরি সংযোগ দিয়ে পুনরায় চেষ্টা করা হচ্ছে...',
+              subText: 'দয়া করে অপেক্ষা করুন'
+            });
+            setTimeout(() => {
+              loadStreamSource(rawUrl, false);
+            }, 600);
+            return;
+          }
+
+          // If direct connection failed, try through proxy
+          if (!useProxy && !hasTriedProxy) {
+            setHasTriedProxy(true);
+            setStatus({
+              type: 'loading',
+              text: 'প্রক্সি সার্ভার দিয়ে রিট্রাই করা হচ্ছে...',
+              subText: 'দয়া করে অপেক্ষা করুন'
+            });
+            setTimeout(() => {
+              loadStreamSource(rawUrl, true);
+            }, 600);
+            return;
+          }
+
+          // If device is Safari / iOS with native HLS support
+          if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            cleanupHls();
             video.src = finalUrl;
             video.play().catch(() => {});
-            setStatus({ type: 'playing', text: 'প্লে হচ্ছে' });
-            setTimeout(() => setStatus(null), 1500);
+            return;
+          }
+
+          // If this is actually a direct file (MP4/MKV)
+          if (isDirectMedia) {
+            cleanupHls();
+            setStreamFormat('Direct');
+            if (video) {
+              video.src = finalUrl;
+              video.play().catch(() => {});
+              setStatus({ type: 'playing', text: 'প্লে হচ্ছে' });
+              setTimeout(() => setStatus(null), 1500);
+            }
+            return;
+          }
+
+          // For HLS streams, don't fallback to MP4 (which always fails in Chrome)
+          setStatus({
+            type: 'error',
+            text: 'স্ট্রিম সংযোগ ব্যর্থ হয়েছে',
+            subText: onFailover ? 'বিকল্প সার্ভারে পরিবর্তন করা হচ্ছে...' : 'সার্ভার অফলাইন বা স্ট্রীম অনুপলব্ধ'
+          });
+          if (onFailover) {
+            setTimeout(onFailover, 1800);
           }
           return;
         }
@@ -357,7 +408,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               break;
             default:
               cleanupHls();
-              if (video) {
+              if (video && (isDirectMedia || video.canPlayType('application/vnd.apple.mpegurl'))) {
                 video.src = finalUrl;
                 video.play().catch(() => {});
               }

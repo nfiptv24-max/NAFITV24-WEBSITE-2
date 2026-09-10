@@ -97,7 +97,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
 
         <form onSubmit={handleCustomM3uSubmit} className="flex flex-col sm:flex-row gap-2">
           <input
-            type="url"
+            type="text"
             placeholder="https://example.com/playlist.m3u"
             value={customM3uUrl}
             onChange={(e) => setCustomM3uUrl(e.target.value)}
@@ -126,7 +126,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
 
         <form onSubmit={handleDirectStreamSubmit} className="flex flex-col sm:flex-row gap-2">
           <input
-            type="url"
+            type="text"
             placeholder="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
             value={directStreamUrl}
             onChange={(e) => setDirectStreamUrl(e.target.value)}

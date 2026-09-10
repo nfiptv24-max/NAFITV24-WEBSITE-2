@@ -281,11 +281,25 @@ export default function App() {
 
   // Play custom direct link
   const handlePlayDirectUrl = (url: string) => {
+    const trimmed = (url || '').trim();
+    if (!trimmed) return;
+
+    const servers = [{ name: 'সার্ভার ১ (Proxy HD)', url: trimmed }];
+
+    // If it's an Astra or HTTP stream, provide direct alternative and MPEG-TS stream
+    if (trimmed.includes('/play/') && trimmed.includes('.m3u8')) {
+      const rawAstraStream = trimmed.replace(/\/index\.m3u8.*$/, '');
+      if (rawAstraStream !== trimmed) {
+        servers.push({ name: 'সার্ভার ২ (Raw Stream)', url: rawAstraStream });
+      }
+    }
+    servers.push({ name: 'সার্ভার ৩ (Direct Link)', url: trimmed });
+
     setActiveMedia({
-      url,
+      url: trimmed,
       title: 'সরাসরি স্ট্রিম (Direct Stream)',
       logo: DEFAULT_LOGO,
-      servers: [{ name: 'Direct Link', url }],
+      servers,
     });
     showToast('সরাসরি স্ট্রিম চালু হচ্ছে');
   };

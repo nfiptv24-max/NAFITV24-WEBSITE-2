@@ -46,9 +46,13 @@ async function fetchWithRetry(
   delayMs = 300
 ): Promise<Response> {
   let lastError: any;
+  const mergedOptions: RequestInit = {
+    ...options,
+    cache: 'no-store',
+  };
   for (let i = 0; i <= retries; i++) {
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, mergedOptions);
       return res;
     } catch (err: any) {
       lastError = err;
@@ -222,6 +226,9 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
               const childText = await childRes.text();
               const rewrittenChild = rewriteM3U8(childText, childRes.url || childAbs);
               res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+              res.setHeader('Pragma', 'no-cache');
+              res.setHeader('Expires', '0');
               res.setHeader('Content-Length', Buffer.byteLength(rewrittenChild).toString());
               res.end(rewrittenChild);
               return;
@@ -234,6 +241,9 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
         // Standard multi-variant or media playlist rewriting
         const rewritten = rewriteM3U8(text, upstreamRes.url || targetUrl);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.setHeader('Content-Length', Buffer.byteLength(rewritten).toString());
         res.end(rewritten);
         return;

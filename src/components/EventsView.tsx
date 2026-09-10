@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Clock, Play } from 'lucide-react';
+import { Trophy, Play, Clock, Hourglass } from 'lucide-react';
 import { LiveEvent } from '../types';
 import { DEFAULT_LOGO } from '../data/defaultData';
 
@@ -21,166 +21,249 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
     return () => clearInterval(timer);
   }, []);
 
-  const sports = ['All', ...Array.from(new Set(events.map((e) => e.sport || 'Cricket')))];
-  const statuses = ['All', 'Live', 'Upcoming'];
+  const baseSports = ['All', 'Cricket', 'Football', 'Hockey', 'More', 'US Open'];
+  const eventSports = Array.from(new Set(events.map((e) => e.sport || 'Football')));
+  const allSports = Array.from(new Set([...baseSports, ...eventSports]));
+
+  const statuses = [
+    { id: 'All', label: 'All' },
+    { id: 'Live', label: 'Live', isLive: true },
+    { id: 'Upcoming', label: 'Upcoming' },
+    { id: 'Today', label: 'Today' },
+    { id: 'Recent Results', label: 'Recent Results' },
+  ];
 
   const filteredEvents = events.filter((ev) => {
-    const sportMatch = selectedSport === 'All' || ev.sport.toLowerCase() === selectedSport.toLowerCase();
-    const statusMatch = selectedStatus === 'All' || ev.status.toLowerCase() === selectedStatus.toLowerCase();
-    return sportMatch && statusMatch;
+    // Sport filter
+    if (selectedSport !== 'All') {
+      if (selectedSport === 'More') {
+        if (['Cricket', 'Football', 'Hockey', 'US Open'].includes(ev.sport)) {
+          return false;
+        }
+      } else if (ev.sport.toLowerCase() !== selectedSport.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // Status filter
+    if (selectedStatus === 'Live' && ev.status !== 'Live') return false;
+    if (selectedStatus === 'Upcoming' && ev.status !== 'Upcoming') return false;
+    if (selectedStatus === 'Today') {
+      const eventDate = new Date(ev.startTime).toDateString();
+      const todayDate = new Date(now).toDateString();
+      if (eventDate !== todayDate) return false;
+    }
+    if (selectedStatus === 'Recent Results' && ev.status !== 'Live' && ev.startTime > now) {
+      return false;
+    }
+
+    return true;
   });
 
-  const formatElapsedTime = (startTime: number) => {
-    const elapsed = now - startTime;
-    if (elapsed <= 0) return 'শুরু হচ্ছে';
-    const h = Math.floor(elapsed / 3600000);
-    const m = Math.floor((elapsed % 3600000) / 60000);
-    const s = Math.floor((elapsed % 60000) / 1000);
-    return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+  const formatCountdownTimer = (startTime: number) => {
+    const remaining = startTime - now;
+    if (remaining <= 0) return '00h 00m 00s';
+    const h = String(Math.floor(remaining / 3600000)).padStart(2, '0');
+    const m = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
+    const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+    return `${h}h ${m}m ${s}s`;
   };
 
-  const formatCountdown = (startTime: number) => {
-    const remaining = startTime - now;
-    if (remaining <= 0) return 'শুরু হচ্ছে';
-    const h = Math.floor(remaining / 3600000);
-    const m = Math.floor((remaining % 3600000) / 60000);
-    const s = Math.floor((remaining % 60000) / 1000);
-    return `${h > 0 ? `${h}ঘণ্টা ` : ''}${m}মি. ${s}সে. পর`;
+  const formatUpcomingTime = (ev: LiveEvent) => {
+    if (ev.matchTimeFormatted) return ev.matchTimeFormatted;
+    try {
+      const d = new Date(ev.startTime);
+      const hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const formattedHours = String(hours % 12 || 12).padStart(2, '0');
+      const day = d.getDate();
+      const month = d.toLocaleString('en-US', { month: 'short' });
+      return `${formattedHours}:${minutes} ${ampm}, ${day} ${month}`;
+    } catch (_) {
+      return '01:00 AM, 11 Sep';
+    }
   };
 
   return (
-    <div className="space-y-4">
-      {/* Category Pills Filters */}
-      <div className="flex flex-wrap items-center gap-2 pb-1">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {sports.map((sp) => (
+    <div className="space-y-3.5 animate-fade-in">
+      {/* Filter Row 1: Sports Categories */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {allSports.map((sp) => {
+          const isActive = selectedSport === sp;
+          return (
             <button
               key={sp}
               onClick={() => setSelectedSport(sp)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                selectedSport === sp
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10'
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'bg-[#131b2e] hover:bg-[#1e293b] text-slate-300 border border-slate-700/50'
               }`}
             >
-              {sp === 'All' ? 'সকল খেলা (All)' : sp}
+              {sp}
             </button>
-          ))}
-        </div>
-
-        <div className="h-4 w-px bg-white/10 hidden sm:block"></div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {statuses.map((st) => (
-            <button
-              key={st}
-              onClick={() => setSelectedStatus(st)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                selectedStatus === st
-                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
-                  : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10'
-              }`}
-            >
-              {st === 'All' ? 'সকল স্ট্যাটাস' : st === 'Live' ? '● লাইভ' : '⏳ আসন্ন (Upcoming)'}
-            </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* Events Grid */}
+      {/* Filter Row 2: Match Statuses */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {statuses.map((st) => {
+          const isActive = selectedStatus === st.id;
+          return (
+            <button
+              key={st.id}
+              onClick={() => setSelectedStatus(st.id)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                isActive
+                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
+                  : 'bg-[#131b2e] hover:bg-[#1e293b] text-slate-300 border border-slate-700/50'
+              }`}
+            >
+              {st.isLive && (
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-pulse"></span>
+              )}
+              <span>{st.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Events List Cards */}
       {filteredEvents.length === 0 ? (
-        <div className="text-center py-12 px-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400">
+        <div className="text-center py-12 px-4 rounded-2xl bg-[#0c1220] border border-slate-800/80 text-slate-400">
           <Trophy className="w-10 h-10 mx-auto mb-2 text-slate-500 opacity-50" />
           <p className="text-sm font-medium">কোনো ম্যাচ পাওয়া যায়নি</p>
           <p className="text-xs text-slate-500 mt-1">অন্য কোনো ফিল্টার সিলেক্ট করে চেষ্টা করুন</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="space-y-3">
           {filteredEvents.map((ev, index) => {
             const isLive = ev.status === 'Live';
+            const matchday = ev.matchday || 'MATCHDAY 1';
+
             return (
               <div
                 key={ev.id || index}
-                onClick={() => onSelectEvent(ev)}
-                className="group relative p-4 rounded-2xl bg-slate-900/75 hover:bg-slate-900 border border-white/10 hover:border-blue-500/50 shadow-lg hover:shadow-xl transition-all cursor-pointer overflow-hidden"
+                className="group relative p-3 sm:p-3.5 rounded-2xl bg-[#0c1220] hover:bg-[#0f172a] border border-slate-800/80 hover:border-blue-500/40 shadow-xl transition-all overflow-hidden"
               >
-                {/* Background ambient gradient */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full blur-2xl pointer-events-none group-hover:bg-blue-600/20 transition-all"></div>
+                <div className="flex flex-row items-stretch gap-3 sm:gap-4">
+                  {/* Left Column: Match Thumbnail & Tournament Pill */}
+                  <div className="w-28 sm:w-32 shrink-0 flex flex-col justify-between">
+                    {/* Visual Matchup Banner (UEFA / Sports style) */}
+                    <div className="w-full h-[74px] sm:h-20 rounded-xl overflow-hidden relative flex items-center justify-around px-2 py-1.5 bg-gradient-to-tr from-[#0b1437] via-[#111c47] to-[#1d1b54] border border-blue-500/30 shadow-inner">
+                      {/* Background stadium subtle pattern / stars */}
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.2)_0%,_transparent_70%)] pointer-events-none"></div>
 
-                {/* Top info bar */}
-                <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-white/5">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-500/10 text-sky-400 border border-blue-500/20 truncate max-w-[200px] sm:max-w-xs">
-                    <Trophy className="w-3 h-3 text-sky-400 shrink-0" />
-                    <span className="truncate">{ev.name || ev.tournament}</span>
-                  </span>
+                      {/* Team 1 Logo */}
+                      <div className="relative z-10 w-8 h-8 rounded-full bg-white/10 p-1 flex items-center justify-center shadow-md shrink-0">
+                        <img
+                          src={ev.team1.logo}
+                          alt={ev.team1.name}
+                          className="w-full h-full object-contain rounded-full"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = DEFAULT_LOGO;
+                          }}
+                        />
+                      </div>
 
-                  {isLive ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                      লাইভ চলছে
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                      <Clock className="w-3 h-3" />
-                      আসন্ন
-                    </span>
-                  )}
-                </div>
+                      {/* Center VS info */}
+                      <div className="relative z-10 flex flex-col items-center justify-center">
+                        <span className="text-[9px] font-black text-slate-200 uppercase tracking-tight bg-black/40 px-1 py-0.5 rounded border border-white/10 shadow-sm">
+                          VS
+                        </span>
+                      </div>
 
-                {/* Matchup visual */}
-                <div className="flex items-center justify-between gap-3">
-                  {/* Team 1 */}
-                  <div className="flex flex-col items-center text-center w-5/12 min-w-0">
-                    <div className="w-12 h-12 rounded-full bg-white/10 p-1.5 mb-2 border border-white/10 shadow-inner group-hover:scale-105 transition-transform flex items-center justify-center">
-                      <img
-                        src={ev.team1.logo}
-                        alt={ev.team1.name}
-                        className="w-full h-full object-contain rounded-full"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_LOGO; }}
-                      />
+                      {/* Team 2 Logo */}
+                      <div className="relative z-10 w-8 h-8 rounded-full bg-white/10 p-1 flex items-center justify-center shadow-md shrink-0">
+                        <img
+                          src={ev.team2.logo}
+                          alt={ev.team2.name}
+                          className="w-full h-full object-contain rounded-full"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = DEFAULT_LOGO;
+                          }}
+                        />
+                      </div>
                     </div>
-                    <span className="text-xs font-bold text-white line-clamp-1">
-                      {ev.team1.name}
-                    </span>
+
+                    {/* Tournament Pill below thumbnail */}
+                    <div
+                      className="w-full mt-1.5 py-1 px-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-semibold text-slate-300 flex items-center justify-center gap-1 truncate text-center"
+                      title={ev.tournament}
+                    >
+                      <Trophy className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span className="truncate">{ev.tournament}</span>
+                    </div>
                   </div>
 
-                  {/* Center VS info */}
-                  <div className="flex flex-col items-center text-center w-3/12 shrink-0">
+                  {/* Right Column: Title, Status Badge, and Action Buttons */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between gap-1.5">
+                    {/* Header Row: Matchday & Status Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[#f59e0b] font-extrabold text-[11px] tracking-wider uppercase truncate">
+                        {matchday}
+                      </span>
+
+                      {isLive ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase bg-rose-600/10 text-rose-400 border border-rose-600/50 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                          LIVE NOW
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-tight bg-amber-500/10 text-amber-300 border border-amber-500/40 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                          UPCOMING • {formatUpcomingTime(ev)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Match Title */}
+                    <h4
+                      className="text-xs sm:text-[13px] font-bold text-white line-clamp-1 group-hover:text-sky-300 transition-colors"
+                      title={ev.name || `${ev.team1.name} vs ${ev.team2.name}`}
+                    >
+                      {ev.name || `${ev.team1.name} vs ${ev.team2.name} | ${ev.tournament}`}
+                    </h4>
+
+                    {/* Action Rows */}
                     {isLive ? (
-                      <div className="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-mono text-xs font-bold">
-                        {formatElapsedTime(ev.startTime)}
+                      <div className="space-y-1.5 pt-0.5">
+                        {/* Live Running Box */}
+                        <div className="w-full py-1 px-2 rounded-lg bg-[#06241a] border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                          <span>ম্যাচটি এখন লাইভ চলছে</span>
+                        </div>
+
+                        {/* Watch Live Button */}
+                        <button
+                          onClick={() => onSelectEvent(ev)}
+                          className="w-full py-1.5 px-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-md shadow-red-600/20 transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-white" />
+                          <span>লাইভ দেখুন</span>
+                        </button>
                       </div>
                     ) : (
-                      <div className="text-[11px] font-medium text-amber-300">
-                        {formatCountdown(ev.startTime)}
+                      <div className="space-y-1.5 pt-0.5">
+                        {/* Countdown Box */}
+                        <div className="w-full py-1 px-2 rounded-lg bg-[#0c1527] border border-slate-700/60 text-[#f59e0b] font-mono text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-[#f59e0b] shrink-0" />
+                          <span>বাকি: {formatCountdownTimer(ev.startTime)}</span>
+                        </div>
+
+                        {/* Channel Link Coming Box / Optional Preview Button */}
+                        <button
+                          onClick={() => onSelectEvent(ev)}
+                          className="w-full py-1.5 px-3 rounded-lg bg-[#111827] border border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-white text-xs font-medium text-center flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Hourglass className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>চ্যানেল লিংক আসছে</span>
+                        </button>
                       </div>
                     )}
-                    <span className="text-xs font-extrabold text-slate-500 mt-1">VS</span>
                   </div>
-
-                  {/* Team 2 */}
-                  <div className="flex flex-col items-center text-center w-5/12 min-w-0">
-                    <div className="w-12 h-12 rounded-full bg-white/10 p-1.5 mb-2 border border-white/10 shadow-inner group-hover:scale-105 transition-transform flex items-center justify-center">
-                      <img
-                        src={ev.team2.logo}
-                        alt={ev.team2.name}
-                        className="w-full h-full object-contain rounded-full"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_LOGO; }}
-                      />
-                    </div>
-                    <span className="text-xs font-bold text-white line-clamp-1">
-                      {ev.team2.name}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Bottom hover action hint */}
-                <div className="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>{ev.sport} ম্যাচ</span>
-                  <span className="flex items-center gap-1 text-sky-400 font-semibold group-hover:translate-x-0.5 transition-transform">
-                    <Play className="w-3 h-3 fill-sky-400" />
-                    এখন দেখুন
-                  </span>
                 </div>
               </div>
             );

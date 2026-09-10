@@ -14,7 +14,7 @@ export interface Channel {
 
 export interface LiveEvent {
   id?: string;
-  sport: 'Cricket' | 'Football' | string;
+  sport: 'Cricket' | 'Football' | 'Hockey' | string;
   status: 'Live' | 'Upcoming';
   tournament: string;
   team1: { name: string; logo: string };
@@ -24,6 +24,9 @@ export interface LiveEvent {
   logo?: string;
   name?: string;
   url?: string;
+  matchday?: string;
+  matchTimeFormatted?: string;
+  banner?: string;
 }
 
 export interface Movie {

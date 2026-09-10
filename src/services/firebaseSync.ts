@@ -175,7 +175,10 @@ export function normalizeEvent(key: string, item: any): LiveEvent {
     name: eventName,
     logo: itemLogo,
     url: mainUrl,
-    servers: extractServersFromItem(item, mainUrl)
+    servers: extractServersFromItem(item, mainUrl),
+    matchday: item.matchday || item.round || item.stage || 'MATCHDAY 1',
+    matchTimeFormatted: item.matchTimeFormatted || item.eventTime || '',
+    banner: item.banner || item.image || item.thumbnail || '',
   };
 }
 

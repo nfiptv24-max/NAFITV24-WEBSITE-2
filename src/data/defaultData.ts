@@ -103,60 +103,113 @@ export const FALLBACK_CHANNELS: Channel[] = [
 
 export const INITIAL_EVENTS: LiveEvent[] = [
   {
-    sport: 'Cricket',
+    sport: 'Football',
     status: 'Live',
-    tournament: 'ICC Champions Trophy',
-    team1: { name: 'Bangladesh', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/bd/bd.png' },
-    team2: { name: 'India', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/in/in.png' },
-    startTime: Date.now() - 1800000, // started 30 mins ago
+    tournament: 'UEFA Champions League',
+    matchday: 'MATCHDAY 1',
+    team1: { name: 'Fenerbahçe', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/fenerbahce.png' },
+    team2: { name: 'AS Roma', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/roma.png' },
+    startTime: Date.now() - 1800000,
     servers: [
-      { name: 'Server 1 (FHD)', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' },
-      { name: 'Server 2 (HD)', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+      { name: 'Server 1 (Live FHD)', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
+      { name: 'Server 2 (HD)', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' }
     ],
-    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/bd/bd.png',
-    name: 'Bangladesh vs India'
+    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/roma.png',
+    name: 'Fenerbahçe vs Roma | UEFA Champions League 2026/27'
   },
   {
     sport: 'Football',
     status: 'Live',
     tournament: 'UEFA Champions League',
-    team1: { name: 'Real Madrid', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/real-madrid.png' },
-    team2: { name: 'Manchester City', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/manchester-city.png' },
-    startTime: Date.now() - 2700000, // started 45 mins ago
+    matchday: 'MATCHDAY 1',
+    team1: { name: 'PSV Eindhoven', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/psv-eindhoven.png' },
+    team2: { name: 'Shakhtar Donetsk', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/shakhtar-donetsk.png' },
+    startTime: Date.now() - 3600000,
+    servers: [
+      { name: 'Main Server', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' },
+      { name: 'Backup Server', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+    ],
+    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/shakhtar-donetsk.png',
+    name: 'PSV vs Shakhtar Donetsk | UEFA Champions League 2026/27'
+  },
+  {
+    sport: 'Football',
+    status: 'Upcoming',
+    tournament: 'UEFA Champions League',
+    matchday: 'MATCHDAY 1',
+    matchTimeFormatted: '01:00 AM, 11 Sep',
+    team1: { name: 'Bayern München', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/bayern-munchen.png' },
+    team2: { name: 'Borussia Dortmund', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/borussia-dortmund.png' },
+    startTime: Date.now() + 3509000, // ~58 mins from now matching screenshot
     servers: [
       { name: 'Server 1', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
       { name: 'Server 2', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' }
     ],
-    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/real-madrid.png',
-    name: 'Real Madrid vs Manchester City'
+    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/bayern-munchen.png',
+    name: 'Bayern vs Dortmund | UEFA Champions League 2026/27'
+  },
+  {
+    sport: 'Football',
+    status: 'Upcoming',
+    tournament: 'UEFA Champions League',
+    matchday: 'MATCHDAY 1',
+    matchTimeFormatted: '01:00 AM, 11 Sep',
+    team1: { name: 'Slavia Praha', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/slavia-praha.png' },
+    team2: { name: 'RC Lens', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/lens.png' },
+    startTime: Date.now() + 3509000, // ~58 mins
+    servers: [
+      { name: 'Server 1', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' },
+      { name: 'Server 2', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+    ],
+    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/slavia-praha.png',
+    name: 'Slavia Praha vs RC Lens | UEFA Champions League 2026/27'
+  },
+  {
+    sport: 'Cricket',
+    status: 'Live',
+    tournament: 'ICC Champions Trophy',
+    matchday: 'GROUP STAGE',
+    team1: { name: 'Bangladesh', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/bd/bd.png' },
+    team2: { name: 'India', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/in/in.png' },
+    startTime: Date.now() - 1800000,
+    servers: [
+      { name: 'Server 1 (FHD)', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' },
+      { name: 'Server 2 (HD)', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+    ],
+    logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/bd/bd.png',
+    name: 'Bangladesh vs India | ICC Champions Trophy'
   },
   {
     sport: 'Football',
     status: 'Upcoming',
     tournament: 'English Premier League',
+    matchday: 'MATCHDAY 5',
+    matchTimeFormatted: '08:30 PM, 11 Sep',
     team1: { name: 'Manchester Utd', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/manchester-united.png' },
     team2: { name: 'Liverpool', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/liverpool.png' },
-    startTime: Date.now() + 7200000, // in 2 hours
+    startTime: Date.now() + 7200000,
     servers: [
       { name: 'Main Feed', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' },
       { name: 'Backup Feed', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
     ],
     logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/clubs/manchester-united.png',
-    name: 'Manchester Utd vs Liverpool'
+    name: 'Manchester Utd vs Liverpool | Premier League'
   },
   {
     sport: 'Cricket',
     status: 'Upcoming',
     tournament: 'Asia Cup Super 4',
+    matchday: 'SUPER 4',
+    matchTimeFormatted: '03:00 PM, 12 Sep',
     team1: { name: 'Pakistan', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/pk/pk.png' },
     team2: { name: 'Sri Lanka', logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/lk/lk.png' },
-    startTime: Date.now() + 14400000, // in 4 hours
+    startTime: Date.now() + 14400000,
     servers: [
       { name: 'Feed A', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
       { name: 'Feed B', url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8' }
     ],
     logo: 'https://cdn.jsdelivr.net/gh/iptv-org/icons@master/country/pk/pk.png',
-    name: 'Pakistan vs Sri Lanka'
+    name: 'Pakistan vs Sri Lanka | Asia Cup Super 4'
   }
 ];
 

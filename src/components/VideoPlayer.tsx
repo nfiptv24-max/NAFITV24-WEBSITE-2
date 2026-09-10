@@ -70,6 +70,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLandscapeRotated, setIsLandscapeRotated] = useState(false);
+  const [windowDimensions, setWindowDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' ? window.innerHeight : 720,
+  });
   const [showControls, setShowControls] = useState(true);
   const [speedIndex, setSpeedIndex] = useState(1);
   const [zoomMode, setZoomMode] = useState<'contain' | 'cover' | 'fill'>('contain');
@@ -428,8 +433,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     };
   }, [onFailover, resetControlsTimer, isProxied, hasTriedProxy, streamUrl]);
 
-  // Fullscreen change listener
+  // Fullscreen and resize / orientation listener
   useEffect(() => {
+    const handleResize = () => {
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
     const handleFsChange = async () => {
       const isFs = !!(
         document.fullscreenElement ||
@@ -440,6 +452,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setIsFullscreen(isFs);
 
       if (isFs) {
+        setIsLandscapeRotated(true);
         try {
           const orientation = screen.orientation as any;
           if (orientation && typeof orientation.lock === 'function') {
@@ -452,6 +465,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           }
         } catch (_) {}
       } else {
+        setIsLandscapeRotated(false);
         try {
           const orientation = screen.orientation as any;
           if (orientation && typeof orientation.unlock === 'function') {
@@ -466,12 +480,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       }
     };
 
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
     document.addEventListener('fullscreenchange', handleFsChange);
     document.addEventListener('webkitfullscreenchange', handleFsChange);
     document.addEventListener('mozfullscreenchange', handleFsChange);
     document.addEventListener('MSFullscreenChange', handleFsChange);
 
     return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
       document.removeEventListener('mozfullscreenchange', handleFsChange);
@@ -545,6 +563,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setZoomMode(nextMode);
   };
 
+  const toggleRotate = async () => {
+    const nextRotated = !isLandscapeRotated;
+    setIsLandscapeRotated(nextRotated);
+    if (nextRotated) {
+      try {
+        const orientation = screen.orientation as any;
+        if (orientation && typeof orientation.lock === 'function') {
+          await orientation.lock('landscape');
+        } else {
+          const s = screen as any;
+          if (s.lockOrientation) s.lockOrientation('landscape');
+          else if (s.mozLockOrientation) s.mozLockOrientation('landscape');
+          else if (s.msLockOrientation) s.msLockOrientation('ms-landscape');
+        }
+      } catch (_) {}
+    } else {
+      try {
+        const orientation = screen.orientation as any;
+        if (orientation && typeof orientation.unlock === 'function') {
+          orientation.unlock();
+        } else {
+          const s = screen as any;
+          if (s.unlockOrientation) s.unlockOrientation();
+          else if (s.mozUnlockOrientation) s.mozUnlockOrientation();
+          else if (s.msUnlockOrientation) s.msUnlockOrientation();
+        }
+      } catch (_) {}
+    }
+  };
+
   const toggleFullscreen = async () => {
     const container = containerRef.current;
     if (!container) return;
@@ -557,6 +605,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     );
 
     if (!isCurrentlyFs) {
+      setIsLandscapeRotated(true);
       try {
         if (container.requestFullscreen) {
           await container.requestFullscreen();
@@ -588,6 +637,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         console.debug('Orientation lock error:', err);
       }
     } else {
+      setIsLandscapeRotated(false);
       try {
         if (document.exitFullscreen) {
           await document.exitFullscreen();
@@ -625,17 +675,46 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     video.currentTime = (seekPercent / 100) * duration;
   };
 
+  const isPortrait = windowDimensions.width < windowDimensions.height;
+  const shouldApplyCssRotation = isLandscapeRotated && isPortrait;
+
+  const containerStyle: React.CSSProperties = shouldApplyCssRotation
+    ? {
+        position: 'fixed',
+        top: 0,
+        left: '100vw',
+        width: '100vh',
+        height: '100vw',
+        transformOrigin: 'top left',
+        transform: 'rotate(90deg)',
+        zIndex: 99999,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        margin: 0,
+        borderRadius: 0,
+      }
+    : {};
+
   return (
     <div
       ref={containerRef}
       onMouseMove={resetControlsTimer}
       onTouchStart={resetControlsTimer}
+      style={containerStyle}
       className={`relative w-full bg-black overflow-hidden select-none transition-all ${
-        isFullscreen ? 'fixed inset-0 z-50 h-screen w-screen' : 'rounded-2xl border border-white/10 shadow-2xl mb-6'
+        isFullscreen || shouldApplyCssRotation
+          ? 'fixed inset-0 z-50 h-screen w-screen'
+          : 'rounded-2xl border border-white/10 shadow-2xl mb-6'
       }`}
     >
-      {/* Video Container (16:9 Aspect Ratio) */}
-      <div className="relative w-full pt-[56.25%] bg-black">
+      {/* Video Container (16:9 Aspect Ratio or full viewport in rotation) */}
+      <div
+        className={`relative w-full bg-black ${
+          isFullscreen || shouldApplyCssRotation
+            ? 'h-full w-full flex items-center justify-center'
+            : 'pt-[56.25%]'
+        }`}
+      >
         {ytEmbedUrl ? (
           <iframe
             src={ytEmbedUrl}
@@ -866,8 +945,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 )}
               </div>
 
-              {/* Right Controls: Aspect Ratio Zoom, Fullscreen */}
-              <div className="flex items-center gap-2">
+              {/* Right Controls: Aspect Ratio Zoom, Rotate, Fullscreen */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={cycleZoom}
                   className="px-2 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
@@ -877,10 +956,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   <span className="capitalize text-[11px] hidden sm:inline">{zoomMode}</span>
                 </button>
 
+                {/* Direct Video Rotate Button */}
+                <button
+                  onClick={toggleRotate}
+                  className={`px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                    isLandscapeRotated
+                      ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/40'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                  title={isLandscapeRotated ? 'স্বাভাবিক মোডে ফিরুন' : 'ভিডিও রোটেট করুন (Rotate)'}
+                >
+                  <RotateCw className={`w-3.5 h-3.5 ${isLandscapeRotated ? 'text-slate-950 animate-spin-slow' : 'text-cyan-400'}`} />
+                  <span className="text-[11px]">রোটেট</span>
+                </button>
+
+                {/* Fullscreen Button (Auto rotates to landscape) */}
                 <button
                   onClick={toggleFullscreen}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
-                  title={isFullscreen ? 'ফুলস্ক্রিন থেকে বের হন' : 'ফুলস্ক্রিন করুন'}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                    isFullscreen ? 'bg-cyan-500 text-slate-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                  title={isFullscreen ? 'ফুলস্ক্রিন থেকে বের হন' : 'ফুলস্ক্রিন ও রোটেট করুন'}
                 >
                   {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 </button>

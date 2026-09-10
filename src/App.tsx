@@ -6,6 +6,7 @@ import { EventsView } from './components/EventsView';
 import { LiveTvView } from './components/LiveTvView';
 import { MoviesView } from './components/MoviesView';
 import { PlaylistsView } from './components/PlaylistsView';
+import { MenuView } from './components/MenuView';
 import { Navigation } from './components/Navigation';
 import {
   Channel,
@@ -420,6 +421,16 @@ export default function App() {
             onLoadPlaylistUrl={handleLoadPlaylistUrl}
             onPlayDirectUrl={handlePlayDirectUrl}
             isLoading={isLoadingPlaylist}
+          />
+        )}
+
+        {currentTab === 'menu' && (
+          <MenuView
+            appMode={appMode}
+            onSetAppMode={handleSetAppMode}
+            onRefreshData={handleRefreshData}
+            isFirebaseConnected={isFirebaseConnected}
+            activeUsersCount={activeUsersCount}
           />
         )}
       </main>

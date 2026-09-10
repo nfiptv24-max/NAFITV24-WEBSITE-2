@@ -1,6 +1,6 @@
 {
   "name": "NAFI TV 24",
-  "description": "Live Sports, TV Channels, Movies & Playlist Streaming Web App optimized for Netlify deployment",
+  "description": "Live Sports, Live TV Channels, Movies, Series & Playlists Streaming Web App",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

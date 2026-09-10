@@ -28,9 +28,9 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
       setErrorMsg('দয়া করে একটি বৈধ M3U URL প্রদান করুন');
       return;
     }
-    if (trimmed.startsWith('http://')) {
-      // Alert about Netlify HTTPS mixed content
-      setErrorMsg('সতর্কতা: Netlify-তে HTTPS বাধ্যতামূলক। এই লিঙ্কটি http:// হওয়ায় ব্রাউজার ব্লক করতে পারে। সম্ভব হলে https:// লিঙ্ক ব্যবহার করুন।');
+    if (trimmed.startsWith('http://') && window.location.protocol === 'https:') {
+      // Stream proxy will be used for http stream
+      setErrorMsg('বিজ্ঞপ্তি: HTTP লিংকটি বিল্ট-ইন প্রক্সি সার্ভারের মাধ্যমে লোড হবে।');
     }
     onLoadPlaylistUrl(trimmed, 'Custom M3U Playlist');
   };

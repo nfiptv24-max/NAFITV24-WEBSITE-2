@@ -1,12 +1,11 @@
 import React from 'react';
-import { PlayCircle, Smartphone, Tv, RotateCcw, Cloud, Sparkles } from 'lucide-react';
+import { PlayCircle, Smartphone, Tv, RotateCcw } from 'lucide-react';
 import { AppMode, TabView } from '../types';
 
 interface HeaderProps {
   currentTab: TabView;
   appMode: AppMode;
   onSetAppMode: (mode: AppMode) => void;
-  onOpenNetlifyGuide: () => void;
   onRefreshData: () => void;
   isFirebaseConnected?: boolean;
   activeUsersCount?: number;
@@ -16,7 +15,6 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   appMode,
   onSetAppMode,
-  onOpenNetlifyGuide,
   onRefreshData,
   isFirebaseConnected = true,
   activeUsersCount = 0,
@@ -28,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({
       case 'movies': return 'সিনেমা ও মুভি (Movies)';
       case 'playlist': return 'প্লেলিস্ট ও M3U (Playlists)';
       case 'menu': return 'মেনু ও সেটিংস (Settings)';
-      case 'netlify-guide': return 'Netlify হোস্ট গাইড (Netlify Guide)';
       default: return 'NAFI TV 24';
     }
   };
@@ -64,16 +61,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action buttons */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Netlify Guide Trigger */}
-          <button
-            onClick={onOpenNetlifyGuide}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition-all cursor-pointer"
-            title="Netlify Hosting Guide"
-          >
-            <Cloud className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">Netlify গাইড</span>
-          </button>
-
           {/* Mode Switcher: Mobile vs TV */}
           <div className="flex items-center bg-white/5 p-0.5 rounded-lg border border-white/10">
             <button

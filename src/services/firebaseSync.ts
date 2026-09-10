@@ -14,6 +14,7 @@ export interface FirebaseSyncedData {
   marqueeNews: string;
   activeUsersCount: number;
   totalUsersCount: number;
+  moviesConfigUrl?: string;
   isConnected: boolean;
   lastSyncedAt: Date | null;
 }
@@ -135,11 +136,81 @@ export function normalizeMovie(key: string, item: any): Movie {
   return {
     id: key,
     name: item.name || item.title || 'Movie',
-    category: item.category || item.genre || item.sport || 'NAFI OTT',
+    category: item.category || item.category_name || item.genre || item.sport || 'NAFI OTT',
     poster: item.poster || item.logo || item.logoUrl || item.image || DEFAULT_POSTER,
     url: mainUrl,
-    servers: normalizeServers(item.servers, mainUrl)
+    servers: normalizeServers(item.sources || item.servers, mainUrl),
+    description: item.description,
+    year: item.year,
+    rating: item.rating,
+    language: item.language,
   };
+}
+
+// Parse custom Movie JSON format ({ categories: [ { category_name, movies: [ { title, poster, sources, ... } ] } ] })
+export function parseMovieJsonFormat(data: any): Movie[] {
+  if (!data || typeof data !== 'object') return [];
+  const list: Movie[] = [];
+
+  if (Array.isArray(data.categories)) {
+    data.categories.forEach((cat: any) => {
+      const catName = cat.category_name || cat.name || 'Movie';
+      const movies = cat.movies || cat.items || [];
+      if (Array.isArray(movies)) {
+        movies.forEach((m: any, idx: number) => {
+          const rawSources = m.sources || m.servers || [];
+          const servers = normalizeServers(rawSources, m.url || '');
+          const mainUrl = servers[0]?.url || m.url || '';
+          list.push({
+            id: `m_json_${catName}_${idx}_${(m.title || m.name || '').replace(/\s+/g, '_')}`,
+            name: m.title || m.name || 'Untitled Movie',
+            category: catName,
+            poster: m.poster || m.image || DEFAULT_POSTER,
+            url: mainUrl,
+            servers: servers.length > 0 ? servers : [{ name: 'Main', url: mainUrl }],
+            description: m.description,
+            year: m.year,
+            rating: m.rating,
+            language: m.language,
+          });
+        });
+      }
+    });
+  }
+
+  return list;
+}
+
+// Fetch all movie JSON playlist files specified in Firebase app_config.moviesM3uUrl
+export async function fetchRemoteMovieJsonPlaylists(urlsString?: string): Promise<Movie[]> {
+  const rawUrls = (urlsString || '')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const targetUrls = rawUrls.length > 0 ? rawUrls : [
+    'https://raw.githubusercontent.com/nafitv24-web/NAFI-TV/refs/heads/main/Kolkata%20serial.json',
+    'https://raw.githubusercontent.com/nafitv24-web/NAFI-TV/refs/heads/main/movies.json',
+  ];
+
+  const allMovies: Movie[] = [];
+  for (const url of targetUrls) {
+    if (url.toLowerCase().endsWith('.json') || url.includes('.json')) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const text = await resp.text();
+        if (text.trim().startsWith('{')) {
+          const json = JSON.parse(text);
+          const parsed = parseMovieJsonFormat(json);
+          allMovies.push(...parsed);
+        }
+      } catch (err) {
+        console.warn('Error fetching movie json playlist:', url, err);
+      }
+    }
+  }
+  return allMovies;
 }
 
 // Normalize Playlists from Firebase Realtime DB
@@ -228,10 +299,41 @@ export function parseFirebasePayload(data: any): Partial<FirebaseSyncedData> {
     result.totalUsersCount = Object.keys(data.all_users).length;
   }
 
+  // 7. Movies Config in app_config
+  if (data.app_config?.moviesM3uUrl) {
+    result.moviesConfigUrl = data.app_config.moviesM3uUrl;
+  }
+
   result.lastSyncedAt = new Date();
   result.isConnected = true;
 
   return result;
+}
+
+// Combine and deduplicate movies from direct Firebase and remote JSON playlists
+export async function loadAllMovies(
+  fbMovies: Movie[] = [],
+  moviesConfigUrl?: string
+): Promise<Movie[]> {
+  try {
+    const jsonMovies = await fetchRemoteMovieJsonPlaylists(moviesConfigUrl);
+    const seen = new Set<string>();
+    const combined: Movie[] = [];
+
+    // Prioritize JSON playlists (rich categories, episodes & posters), then Firebase direct
+    [...jsonMovies, ...fbMovies].forEach((m) => {
+      const key = `${m.name.trim().toLowerCase()}_${m.category.trim().toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(m);
+      }
+    });
+
+    return combined.length > 0 ? combined : fbMovies;
+  } catch (err) {
+    console.warn('Error loading all movies:', err);
+    return fbMovies;
+  }
 }
 
 // REST fallback fetcher

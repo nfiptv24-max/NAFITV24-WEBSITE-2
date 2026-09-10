@@ -1,5 +1,5 @@
 import React from 'react';
-import { Podcast, Star, Film, FolderOpen, Cloud, Zap } from 'lucide-react';
+import { Podcast, Star, Film, FolderOpen, Zap } from 'lucide-react';
 import { AppMode, TabView } from '../types';
 
 interface NavigationProps {
@@ -14,7 +14,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, appMode, onS
     { id: 'live-tv', label: 'লাইভ টিভি', icon: <Star className="w-5 h-5" /> },
     { id: 'movies', label: 'মুভি', icon: <Film className="w-5 h-5" /> },
     { id: 'playlist', label: 'প্লেলিস্ট', icon: <FolderOpen className="w-5 h-5" /> },
-    { id: 'netlify-guide', label: 'Netlify', icon: <Cloud className="w-5 h-5" /> },
   ];
 
   if (appMode === 'tv') {

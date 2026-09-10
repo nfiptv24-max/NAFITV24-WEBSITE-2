@@ -29,10 +29,14 @@ export interface LiveEvent {
 export interface Movie {
   id?: string;
   name: string;
-  category: 'Bangla' | 'Hindi' | 'Hollywood' | 'Bollywood' | string;
+  category: string;
   poster: string;
   url: string;
   servers: StreamServer[];
+  description?: string;
+  year?: string;
+  rating?: string;
+  language?: string;
 }
 
 export interface Playlist {
@@ -44,4 +48,4 @@ export interface Playlist {
 
 export type AppMode = 'mobile' | 'tv';
 
-export type TabView = 'events' | 'live-tv' | 'movies' | 'playlist' | 'menu' | 'netlify-guide';
+export type TabView = 'events' | 'live-tv' | 'movies' | 'playlist' | 'menu';

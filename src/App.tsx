@@ -7,7 +7,6 @@ import { LiveTvView } from './components/LiveTvView';
 import { MoviesView } from './components/MoviesView';
 import { PlaylistsView } from './components/PlaylistsView';
 import { Navigation } from './components/Navigation';
-import { NetlifyGuideModal } from './components/NetlifyGuideModal';
 import {
   Channel,
   LiveEvent,
@@ -29,6 +28,7 @@ import { parseM3U } from './utils/streamUtils';
 import {
   subscribeToFirebase,
   fetchFirebaseRootRest,
+  loadAllMovies,
   UPDATE_CHANNEL_M3U_URL,
   FIREBASE_DB_URL,
   FirebaseSyncedData,
@@ -38,7 +38,6 @@ export default function App() {
   // App settings & view state
   const [appMode, setAppMode] = useState<AppMode>('mobile');
   const [currentTab, setCurrentTab] = useState<TabView>('events');
-  const [isNetlifyGuideOpen, setIsNetlifyGuideOpen] = useState(false);
 
   // Content Data State
   const [m3uChannels, setM3uChannels] = useState<Channel[]>([]);
@@ -110,14 +109,24 @@ export default function App() {
     // 1. Initial fetch of Update Channel M3U
     loadRemoteM3uChannels();
 
+    // Load initial movies including remote JSON playlists (Kolkata serial, Bangla movies, etc.)
+    loadAllMovies(INITIAL_MOVIES).then((loaded) => {
+      if (loaded && loaded.length > 0) {
+        setMovies(loaded);
+      }
+    });
+
     // 2. Subscribe to Firebase Realtime Database
     const unsubscribe = subscribeToFirebase((syncedData: Partial<FirebaseSyncedData>) => {
       if (syncedData.events && syncedData.events.length > 0) {
         setEvents(syncedData.events);
       }
-      if (syncedData.movies && syncedData.movies.length > 0) {
-        setMovies(syncedData.movies);
-      }
+      // Load both direct Firebase movies and JSON playlists specified in app_config.moviesM3uUrl
+      loadAllMovies(syncedData.movies || [], syncedData.moviesConfigUrl).then((allMovies) => {
+        if (allMovies && allMovies.length > 0) {
+          setMovies(allMovies);
+        }
+      });
       if (syncedData.playlists && syncedData.playlists.length > 0) {
         setPlaylists(syncedData.playlists);
       }
@@ -294,7 +303,6 @@ export default function App() {
         currentTab={currentTab}
         appMode={appMode}
         onSetAppMode={handleSetAppMode}
-        onOpenNetlifyGuide={() => setIsNetlifyGuideOpen(true)}
         onRefreshData={handleRefreshData}
         isFirebaseConnected={isFirebaseConnected}
         activeUsersCount={activeUsersCount}
@@ -351,31 +359,14 @@ export default function App() {
             isLoading={isLoadingPlaylist}
           />
         )}
-
-        {currentTab === 'netlify-guide' && (
-          <div className="py-2">
-            <NetlifyGuideModal onClose={() => setCurrentTab('events')} />
-          </div>
-        )}
       </main>
 
       {/* Navigation (Bottom for Mobile, Sidebar for TV) */}
       <Navigation
         currentTab={currentTab}
         appMode={appMode}
-        onSelectTab={(tab) => {
-          if (tab === 'netlify-guide') {
-            setIsNetlifyGuideOpen(true);
-          } else {
-            setCurrentTab(tab);
-          }
-        }}
+        onSelectTab={(tab) => setCurrentTab(tab)}
       />
-
-      {/* Netlify Guide Modal */}
-      {isNetlifyGuideOpen && (
-        <NetlifyGuideModal onClose={() => setIsNetlifyGuideOpen(false)} />
-      )}
 
       {/* Toast Notification */}
       <div

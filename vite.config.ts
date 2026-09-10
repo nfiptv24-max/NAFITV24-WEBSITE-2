@@ -3,9 +3,26 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+import { handleStreamProxy } from './src/server/proxyHandler';
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'stream-proxy-plugin',
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            if (req.url && req.url.startsWith('/api/proxy')) {
+              await handleStreamProxy(req, res);
+            } else {
+              next();
+            }
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

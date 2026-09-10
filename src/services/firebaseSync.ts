@@ -41,7 +41,7 @@ export function normalizeServers(rawServers: any, fallbackUrl: string): StreamSe
     return rawServers.map((s, idx) => ({
       name: typeof s === 'string' ? `Server ${idx + 1}` : (s.name || s.server_name || `Server ${idx + 1}`),
       url: typeof s === 'string' ? s : (s.url || fallbackUrl)
-    })).filter(s => !!s.url && s.url.trim() !== '');
+    })).filter(s => !!s.url && typeof s.url === 'string' && s.url.trim() !== '');
   }
 
   if (rawServers && typeof rawServers === 'object') {
@@ -54,14 +54,60 @@ export function normalizeServers(rawServers: any, fallbackUrl: string): StreamSe
         list.push({ name: val.name || val.server_name || key || `Server ${idx + 1}`, url: val.url });
       }
     });
-    if (list.length > 0) return list.filter(s => !!s.url && s.url.trim() !== '');
+    if (list.length > 0) return list.filter(s => !!s.url && typeof s.url === 'string' && s.url.trim() !== '');
   }
 
   if (fallbackUrl && fallbackUrl.trim() !== '') {
-    return [{ name: 'Main Server', url: fallbackUrl }];
+    return [{ name: 'Server 1', url: fallbackUrl }];
   }
 
   return [];
+}
+
+// Extract all potential servers, mirrors, and stream URLs from any item node
+export function extractServersFromItem(item: any, fallbackUrl: string): StreamServer[] {
+  const servers: StreamServer[] = [];
+  const seenUrls = new Set<string>();
+
+  const add = (name: string, url: any) => {
+    if (typeof url === 'string' && url.trim().startsWith('http')) {
+      const cleanUrl = url.trim();
+      if (!seenUrls.has(cleanUrl)) {
+        seenUrls.add(cleanUrl);
+        servers.push({
+          name: name || `Server ${servers.length + 1}`,
+          url: cleanUrl,
+        });
+      }
+    }
+  };
+
+  // 1. Array or object servers
+  if (item?.servers) {
+    normalizeServers(item.servers, '').forEach((s) => add(s.name, s.url));
+  }
+  if (item?.sources) {
+    normalizeServers(item.sources, '').forEach((s) => add(s.name, s.url));
+  }
+
+  // 2. Multi-server fields (server1..server8, link1..link8, etc.)
+  for (let i = 1; i <= 8; i++) {
+    if (item?.[`server${i}`]) add(`Server ${i}`, item[`server${i}`]);
+    if (item?.[`server_${i}`]) add(`Server ${i}`, item[`server_${i}`]);
+    if (item?.[`link${i}`]) add(`Server ${i}`, item[`link${i}`]);
+    if (item?.[`link_${i}`]) add(`Server ${i}`, item[`link_${i}`]);
+    if (item?.[`stream_url${i}`]) add(`Server ${i}`, item[`stream_url${i}`]);
+  }
+
+  if (item?.backup_url) add('Backup Server', item.backup_url);
+  if (item?.alternate_url) add('Alternate Server', item.alternate_url);
+
+  // 3. Fallback main URL
+  if (fallbackUrl) {
+    add('Server 1', fallbackUrl);
+  }
+
+  return servers.length > 0 ? servers : fallbackUrl ? [{ name: 'Server 1', url: fallbackUrl }] : [];
 }
 
 // Normalize Channels from Firebase Realtime DB
@@ -73,7 +119,7 @@ export function normalizeChannel(key: string, item: any): Channel {
     logo: item.logo || item.icon || item.image || item.logoUrl || item.poster || DEFAULT_LOGO,
     url: mainUrl,
     category: item.category || item.group || item.genre || 'Live TV',
-    servers: normalizeServers(item.servers, mainUrl)
+    servers: extractServersFromItem(item, mainUrl)
   };
 }
 
@@ -129,7 +175,7 @@ export function normalizeEvent(key: string, item: any): LiveEvent {
     name: eventName,
     logo: itemLogo,
     url: mainUrl,
-    servers: normalizeServers(item.servers, mainUrl)
+    servers: extractServersFromItem(item, mainUrl)
   };
 }
 
@@ -142,7 +188,7 @@ export function normalizeMovie(key: string, item: any): Movie {
     category: item.category || item.category_name || item.genre || item.sport || 'NAFI OTT',
     poster: item.poster || item.logo || item.logoUrl || item.image || DEFAULT_POSTER,
     url: mainUrl,
-    servers: normalizeServers(item.sources || item.servers, mainUrl),
+    servers: extractServersFromItem(item, mainUrl),
     description: item.description,
     year: item.year,
     rating: item.rating,

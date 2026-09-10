@@ -241,11 +241,25 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
     }
 
     // Direct streaming for TS segments, MP4, MKV, WebM, etc.
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Accept-Ranges', 'bytes');
+
     if (contentType) {
-      res.setHeader('Content-Type', contentType);
+      if (
+        contentType.includes('matroska') ||
+        contentType.includes('mkv') ||
+        targetUrl.toLowerCase().includes('.mkv') ||
+        (contentType.includes('octet-stream') && !targetUrl.includes('.ts'))
+      ) {
+        res.setHeader('Content-Type', 'video/mp4');
+      } else {
+        res.setHeader('Content-Type', contentType);
+      }
     } else if (targetUrl.endsWith('.ts') || targetUrl.includes('.ts?')) {
       res.setHeader('Content-Type', 'video/mp2t');
     } else if (targetUrl.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+    } else {
       res.setHeader('Content-Type', 'video/mp4');
     }
 

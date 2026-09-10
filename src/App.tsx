@@ -219,11 +219,40 @@ export default function App() {
   // Play a specific channel
   const handleSelectChannel = (channel: Channel, index: number) => {
     setCurrentChannelIndex(index);
+    const existingServers = channel.servers && channel.servers.length > 0
+      ? [...channel.servers]
+      : [{ name: 'Server 1', url: channel.url }];
+
+    // Discover any other channel in the loaded list that has the same base name or mirror
+    const cleanCurrent = channel.name
+      .toLowerCase()
+      .replace(/\s*(\(server\s*\d+\)|server\s*\d+|hd|sd|fhd|4k|\d+p)\s*/gi, '')
+      .trim();
+
+    if (cleanCurrent) {
+      channels.forEach((c) => {
+        if (c.url && c.url !== channel.url) {
+          const cleanOther = c.name
+            .toLowerCase()
+            .replace(/\s*(\(server\s*\d+\)|server\s*\d+|hd|sd|fhd|4k|\d+p)\s*/gi, '')
+            .trim();
+          if (cleanOther === cleanCurrent) {
+            if (!existingServers.some((s) => s.url === c.url)) {
+              existingServers.push({
+                name: c.name || `Server ${existingServers.length + 1}`,
+                url: c.url,
+              });
+            }
+          }
+        }
+      });
+    }
+
     setActiveMedia({
       url: channel.url,
       title: channel.name,
       logo: channel.logo || DEFAULT_LOGO,
-      servers: channel.servers || [{ name: 'Main', url: channel.url }],
+      servers: existingServers,
     });
   };
 

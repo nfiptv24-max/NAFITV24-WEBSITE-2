@@ -16,6 +16,10 @@ import {
   CheckCircle2,
   Server,
   ShieldCheck,
+  ChevronDown,
+  ExternalLink,
+  Check,
+  RotateCw,
 } from 'lucide-react';
 import { StreamServer } from '../types';
 import { DEFAULT_LOGO } from '../data/defaultData';
@@ -70,9 +74,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [speedIndex, setSpeedIndex] = useState(1);
   const [zoomMode, setZoomMode] = useState<'contain' | 'cover' | 'fill'>('contain');
   const [showLogoOverlay, setShowLogoOverlay] = useState(true);
-  const [streamFormat, setStreamFormat] = useState<'HLS' | 'MP4' | 'DASH' | 'YouTube'>('HLS');
+  const [streamFormat, setStreamFormat] = useState<'HLS' | 'MP4' | 'DASH' | 'YouTube' | 'Direct'>('HLS');
   const [isProxied, setIsProxied] = useState(false);
   const [hasTriedProxy, setHasTriedProxy] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
 
   // Status message overlay
   const [status, setStatus] = useState<{
@@ -121,10 +126,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         trimmed.includes('|') ||
         trimmed.includes('rumsport') ||
         trimmed.includes('jagobd') ||
+        trimmed.includes('movielinkbd') ||
+        trimmed.includes('fast.movielinkbd') ||
         trimmed.includes('share.google');
 
-      // If page is HTTPS and stream is HTTP, or restricted stream, route through proxy
-      if (forceProxy || (isPageHttps && isHttp) || isAstraOrRestricted) {
+      const isDirectMedia =
+        trimmed.includes('.mkv') ||
+        trimmed.includes('.mp4') ||
+        trimmed.includes('movielinkbd') ||
+        trimmed.includes('fast.movielinkbd');
+
+      // If page is HTTPS and stream is HTTP, or restricted stream, or direct file requiring CORS proxy
+      if (forceProxy || (isPageHttps && isHttp) || isAstraOrRestricted || isDirectMedia) {
         setIsProxied(true);
         return `/api/proxy?url=${encodeURIComponent(trimmed)}`;
       }
@@ -158,6 +171,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const urlLower = streamUrl.toLowerCase();
     if (urlLower.includes('.m3u8')) setStreamFormat('HLS');
     else if (urlLower.includes('.mpd')) setStreamFormat('DASH');
+    else if (urlLower.includes('.mkv') || urlLower.includes('movielinkbd')) setStreamFormat('Direct');
     else setStreamFormat('MP4');
 
     setStatus({
@@ -174,6 +188,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       streamUrl.includes('|') ||
       streamUrl.includes('rumsport') ||
       streamUrl.includes('jagobd') ||
+      streamUrl.includes('movielinkbd') ||
+      streamUrl.includes('fast.movielinkbd') ||
       streamUrl.includes('share.google');
     const shouldUseProxy = (isPageHttps && isHttp) || isAstraOrRestricted;
 
@@ -199,9 +215,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const finalUrl = computePlayUrl(rawUrl, useProxy);
     const urlLower = rawUrl.toLowerCase();
 
-    const isHls = urlLower.includes('.m3u8') || finalUrl.includes('.m3u8') || finalUrl.includes('/api/proxy');
+    // Check if direct media file (e.g. MKV, MP4, MOV, fast.movielinkbd)
+    const isDirectMedia =
+      urlLower.includes('.mp4') ||
+      urlLower.includes('.mkv') ||
+      urlLower.includes('.webm') ||
+      urlLower.includes('.avi') ||
+      urlLower.includes('movielinkbd') ||
+      urlLower.includes('fast.movielinkbd') ||
+      urlLower.includes('drive.google.com') ||
+      urlLower.includes('/movies/');
 
-    if (isHls && Hls.isSupported()) {
+    const isExplicitHls =
+      !isDirectMedia &&
+      (urlLower.includes('.m3u8') ||
+        urlLower.includes('index.m3u8') ||
+        urlLower.includes('/play/') ||
+        urlLower.includes('?hls') ||
+        rawUrl.includes('|') ||
+        rawUrl.includes('rumsport') ||
+        rawUrl.includes('jagobd'));
+
+    if (isExplicitHls && Hls.isSupported()) {
+      setStreamFormat('HLS');
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -230,6 +266,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       let networkRetryCount = 0;
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        // If manifest error, it could be a direct media stream wrongly detected as HLS
+        if (data.details === 'manifestParsingError' || data.details === 'manifestLoadError') {
+          console.warn('HLS manifest error, falling back to native HTML5 video player:', data.details);
+          cleanupHls();
+          setStreamFormat(isDirectMedia ? 'Direct' : 'MP4');
+          if (video) {
+            video.src = finalUrl;
+            video.play().catch(() => {});
+            setStatus({ type: 'playing', text: 'প্লে হচ্ছে' });
+            setTimeout(() => setStatus(null), 1500);
+          }
+          return;
+        }
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -272,6 +322,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               break;
             default:
               cleanupHls();
+              if (video) {
+                video.src = finalUrl;
+                video.play().catch(() => {});
+              }
               if (onFailover) {
                 setTimeout(onFailover, 1500);
               }
@@ -280,7 +334,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         }
       });
     } else {
-      // Native HTML5 video element (MP4, WebM, or Safari native HLS)
+      // Native HTML5 video element (MP4, MKV via proxy, WebM, or Safari native HLS)
+      setStreamFormat(isDirectMedia ? 'Direct' : 'MP4');
       video.src = finalUrl;
       video.play().catch(() => {});
       setStatus({ type: 'playing', text: 'প্লে হচ্ছে' });
@@ -375,11 +430,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   // Fullscreen change listener
   useEffect(() => {
-    const handleFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+    const handleFsChange = async () => {
+      const isFs = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreen(isFs);
+
+      if (isFs) {
+        try {
+          const orientation = screen.orientation as any;
+          if (orientation && typeof orientation.lock === 'function') {
+            await orientation.lock('landscape');
+          } else {
+            const s = screen as any;
+            if (s.lockOrientation) s.lockOrientation('landscape');
+            else if (s.mozLockOrientation) s.mozLockOrientation('landscape');
+            else if (s.msLockOrientation) s.msLockOrientation('ms-landscape');
+          }
+        } catch (_) {}
+      } else {
+        try {
+          const orientation = screen.orientation as any;
+          if (orientation && typeof orientation.unlock === 'function') {
+            orientation.unlock();
+          } else {
+            const s = screen as any;
+            if (s.unlockOrientation) s.unlockOrientation();
+            else if (s.mozUnlockOrientation) s.mozUnlockOrientation();
+            else if (s.msUnlockOrientation) s.msUnlockOrientation();
+          }
+        } catch (_) {}
+      }
     };
+
     document.addEventListener('fullscreenchange', handleFsChange);
-    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    document.addEventListener('mozfullscreenchange', handleFsChange);
+    document.addEventListener('MSFullscreenChange', handleFsChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      document.removeEventListener('mozfullscreenchange', handleFsChange);
+      document.removeEventListener('MSFullscreenChange', handleFsChange);
+    };
   }, []);
 
   // Keyboard shortcuts
@@ -452,21 +549,71 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const container = containerRef.current;
     if (!container) return;
 
-    if (!document.fullscreenElement) {
+    const isCurrentlyFs = !!(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement
+    );
+
+    if (!isCurrentlyFs) {
       try {
         if (container.requestFullscreen) {
           await container.requestFullscreen();
+        } else if ((container as any).webkitRequestFullscreen) {
+          await (container as any).webkitRequestFullscreen();
+        } else if ((container as any).mozRequestFullScreen) {
+          await (container as any).mozRequestFullScreen();
+        } else if ((container as any).msRequestFullscreen) {
+          await (container as any).msRequestFullscreen();
+        } else if (videoRef.current && (videoRef.current as any).webkitEnterFullscreen) {
+          (videoRef.current as any).webkitEnterFullscreen();
         }
       } catch (err) {
-        // Fullscreen error
+        console.debug('Fullscreen enter error:', err);
+      }
+
+      // Auto-rotate to landscape on fullscreen
+      try {
+        const orientation = screen.orientation as any;
+        if (orientation && typeof orientation.lock === 'function') {
+          await orientation.lock('landscape');
+        } else {
+          const s = screen as any;
+          if (s.lockOrientation) s.lockOrientation('landscape');
+          else if (s.mozLockOrientation) s.mozLockOrientation('landscape');
+          else if (s.msLockOrientation) s.msLockOrientation('ms-landscape');
+        }
+      } catch (err) {
+        console.debug('Orientation lock error:', err);
       }
     } else {
       try {
         if (document.exitFullscreen) {
           await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          await (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
         }
       } catch (err) {
-        // Exit error
+        console.debug('Fullscreen exit error:', err);
+      }
+
+      try {
+        const orientation = screen.orientation as any;
+        if (orientation && typeof orientation.unlock === 'function') {
+          orientation.unlock();
+        } else {
+          const s = screen as any;
+          if (s.unlockOrientation) s.unlockOrientation();
+          else if (s.mozUnlockOrientation) s.mozUnlockOrientation();
+          else if (s.msUnlockOrientation) s.msUnlockOrientation();
+        }
+      } catch (err) {
+        console.debug('Orientation unlock error:', err);
       }
     }
   };
@@ -572,6 +719,38 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
           {/* Servers list, Proxy toggle & Format Badge */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Dedicated Server Switcher Button (visible on all screens if servers > 1) */}
+            {servers.length > 1 && (
+              <div className="flex items-center gap-1.5 bg-black/70 p-1 rounded-lg border border-white/15">
+                <button
+                  onClick={() => setShowServerModal(true)}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-blue-600/30 text-blue-200 hover:bg-blue-600 hover:text-white border border-blue-500/40 transition-all cursor-pointer"
+                  title="সার্ভার পরিবর্তন করুন"
+                >
+                  <Server className="w-3.5 h-3.5 text-blue-400" />
+                  <span>সার্ভার ({servers.length})</span>
+                  <ChevronDown className="w-3 h-3 text-blue-300" />
+                </button>
+
+                {/* Quick Server buttons for tablets/desktop */}
+                <div className="hidden sm:flex items-center gap-1">
+                  {servers.slice(0, 4).map((srv, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => onSelectServer && onSelectServer(srv.url)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                        srv.url === streamUrl
+                          ? 'bg-blue-600 text-white shadow'
+                          : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      {srv.name || `S${idx + 1}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Proxy Mode indicator / toggle */}
             {!ytEmbedUrl && (
               <button
@@ -586,25 +765,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 <ShieldCheck className="w-3 h-3" />
                 <span className="hidden sm:inline">প্রক্সি {isProxied ? 'অন' : 'অফ'}</span>
               </button>
-            )}
-
-            {servers.length > 1 && (
-              <div className="hidden sm:flex items-center gap-1.5 bg-black/60 p-1 rounded-lg border border-white/10">
-                <Server className="w-3 h-3 text-slate-400 ml-1" />
-                {servers.map((srv, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => onSelectServer && onSelectServer(srv.url)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all cursor-pointer ${
-                      srv.url === streamUrl
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-300 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {srv.name || `S${idx + 1}`}
-                  </button>
-                ))}
-              </div>
             )}
 
             <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-500/20 text-sky-400 border border-sky-500/40">
@@ -644,7 +804,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
             {/* Primary Buttons Row */}
             <div className="flex items-center justify-between gap-2 mt-1">
-              {/* Left Controls: Mute, Speed */}
+              {/* Left Controls: Mute, Speed, Server Switcher */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={toggleMute}
@@ -661,6 +821,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 >
                   {speeds[speedIndex]}x
                 </button>
+
+                {servers.length > 1 && (
+                  <button
+                    onClick={() => setShowServerModal(true)}
+                    className="px-2.5 py-1 rounded-full bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 text-blue-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="সার্ভার পরিবর্তন করুন"
+                  >
+                    <Server className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="hidden sm:inline">সার্ভার</span>
+                    <span>({servers.length})</span>
+                  </button>
+                )}
               </div>
 
               {/* Center Controls: Prev, Play/Pause, Next */}
@@ -712,6 +884,109 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 >
                   {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Server Selector Modal / Drawer */}
+        {showServerModal && (
+          <div
+            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-center items-center p-4 animate-fade-in"
+            onClick={() => setShowServerModal(false)}
+          >
+            <div
+              className="bg-slate-900/95 border border-white/15 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 max-h-[85%] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <Server className="w-5 h-5 text-blue-400" />
+                  <h3 className="text-white font-bold text-base">সার্ভার পরিবর্তন করুন</h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-medium">
+                    {servers.length} টি উপলব্ধ
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowServerModal(false)}
+                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {servers.map((srv, idx) => {
+                  const isCurrent = srv.url === streamUrl;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        if (onSelectServer) onSelectServer(srv.url);
+                        setShowServerModal(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-blue-600/25 border-blue-500 text-white shadow-lg'
+                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                            isCurrent ? 'bg-blue-600 text-white shadow-md' : 'bg-white/10 text-slate-400'
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-sm truncate flex items-center gap-2">
+                            {srv.name || `সার্ভার ${idx + 1}`}
+                            {isCurrent && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-400/40">
+                                সক্রিয়
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono truncate max-w-[240px]">
+                            {srv.url}
+                          </div>
+                        </div>
+                      </div>
+                      {isCurrent ? (
+                        <Check className="w-5 h-5 text-emerald-400 shrink-0 ml-2" />
+                      ) : (
+                        <span className="text-xs text-blue-400 shrink-0 ml-2 font-medium hover:underline">
+                          প্লে করুন
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Utility actions: Proxy bypass & External stream link */}
+              <div className="pt-2 border-t border-white/10 flex flex-wrap gap-2 items-center justify-between">
+                <button
+                  onClick={toggleProxy}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                    isProxied
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>প্রক্সি: {isProxied ? 'চালু (Bypassed)' : 'বন্ধ (Direct)'}</span>
+                </button>
+
+                <a
+                  href={streamUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>সরাসরি লিঙ্ক</span>
+                </a>
               </div>
             </div>
           </div>

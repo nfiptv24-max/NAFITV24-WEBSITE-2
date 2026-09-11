@@ -235,6 +235,26 @@ export const INITIAL_MOVIES: Movie[] = [
     ]
   },
   {
+    name: 'MacGyver (1985) S01-E01 (Bangla Dubbed)',
+    category: 'Bangla Dubbed',
+    poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80',
+    url: 'https://pub-976af5d3d697423fb74ec395e0a8d6d3.r2.dev/MacGyver%20(1985)-S01-%5BEpi-01%5D-MovieDokan.xyz-CineDokan.site-Bangla%20Dubbed-WEB.DL-720p.mkv',
+    servers: [
+      { name: 'Ultra Remux (720p HD)', url: 'https://pub-976af5d3d697423fb74ec395e0a8d6d3.r2.dev/MacGyver%20(1985)-S01-%5BEpi-01%5D-MovieDokan.xyz-CineDokan.site-Bangla%20Dubbed-WEB.DL-720p.mkv' },
+      { name: 'Cloudflare R2 Direct', url: 'https://pub-976af5d3d697423fb74ec395e0a8d6d3.r2.dev/MacGyver%20(1985)-S01-%5BEpi-01%5D-MovieDokan.xyz-CineDokan.site-Bangla%20Dubbed-WEB.DL-720p.mkv' }
+    ]
+  },
+  {
+    name: 'Gunda (2021) Bangla Dubbed (720p)',
+    category: 'Bangla Dubbed',
+    poster: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&q=80',
+    url: 'https://fast.movielinkbd.app/f156159d955746730a43ad73a2ad5278?token=1788609600-081158f53317ab32f694d05b1a0e0a2980757541',
+    servers: [
+      { name: 'Fast MovieLinkBD Server', url: 'https://fast.movielinkbd.app/f156159d955746730a43ad73a2ad5278?token=1788609600-081158f53317ab32f694d05b1a0e0a2980757541' },
+      { name: 'Direct Remux Server', url: 'https://fast.movielinkbd.app/f156159d955746730a43ad73a2ad5278?token=1788609600-081158f53317ab32f694d05b1a0e0a2980757541' }
+    ]
+  },
+  {
     name: 'Interstellar',
     category: 'Hollywood',
     poster: 'https://m.media-amazon.com/images/M/MV5BZjdkOTU3MDktN2IxOS00OGEyLWFmMjktY2FiMmZkNWIyODZiXkEyXkFqcGdeQXVyMTMxODk2OTU@._V1_.jpg',

@@ -1,5 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { Readable } from 'stream';
+import { handleRemuxStream } from './remuxHandler';
 
 // Rewrite M3U8 URLs so segments and nested playlists are routed through the proxy
 export function rewriteM3U8(content: string, baseUrl: string): string {
@@ -182,6 +183,18 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
     }
 
     const contentType = (upstreamRes.headers.get('content-type') || '').toLowerCase();
+
+    // Check if target is an MKV or non-native video container that requires on-the-fly remuxing
+    const isMkvOrUnsupportedContainer =
+      targetUrl.toLowerCase().includes('.mkv') ||
+      targetUrl.toLowerCase().includes('.avi') ||
+      contentType.includes('matroska') ||
+      contentType.includes('x-matroska');
+
+    if (isMkvOrUnsupportedContainer) {
+      handleRemuxStream(req, res);
+      return;
+    }
 
     // Check if target is a known binary media segment or key
     const isKeyRequest =

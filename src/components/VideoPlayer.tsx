@@ -22,6 +22,10 @@ import {
   RotateCw,
   Eye,
   EyeOff,
+  Film,
+  Copy,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
 import { StreamServer } from '../types';
 import { DEFAULT_LOGO } from '../data/defaultData';
@@ -81,8 +85,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [speedIndex, setSpeedIndex] = useState(1);
   const [zoomMode, setZoomMode] = useState<'contain' | 'cover' | 'fill'>('contain');
   const [showLogoOverlay, setShowLogoOverlay] = useState(true);
-  const [streamFormat, setStreamFormat] = useState<'HLS' | 'MP4' | 'DASH' | 'YouTube' | 'Direct'>('HLS');
+  const [streamFormat, setStreamFormat] = useState<'HLS' | 'MP4' | 'DASH' | 'YouTube' | 'Direct' | 'Remux'>('HLS');
   const [isProxied, setIsProxied] = useState(false);
+  const [isRemuxMode, setIsRemuxMode] = useState(false);
+  const [remuxBaseTime, setRemuxBaseTime] = useState(0);
+  const remuxBaseTimeRef = useRef(0);
+  const [probeMeta, setProbeMeta] = useState<any>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [hasTriedProxy, setHasTriedProxy] = useState(false);
   const [showServerModal, setShowServerModal] = useState(false);
 
@@ -157,29 +166,40 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   }, []);
 
-  // Compute the playable source URL (resolving HTTP mixed-content & proxy)
+  // Compute the playable source URL (resolving HTTP mixed-content, proxy & high-speed remux)
   const computePlayUrl = useCallback(
-    (rawUrl: string, forceProxy: boolean) => {
+    (rawUrl: string, forceProxy: boolean, forceRemux?: boolean) => {
       const trimmed = (rawUrl || '').trim();
       if (!trimmed) return '';
 
       const isPageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const isHttp = trimmed.startsWith('http://');
+      const urlLower = trimmed.toLowerCase();
+
+      const isRemuxTarget =
+        forceRemux ||
+        urlLower.includes('.mkv') ||
+        urlLower.includes('.avi') ||
+        urlLower.includes('movielinkbd') ||
+        urlLower.includes('fast.movielinkbd') ||
+        urlLower.includes('r2.dev');
+
+      if (isRemuxTarget) {
+        setIsRemuxMode(true);
+        setIsProxied(false);
+        const ss = Math.floor(remuxBaseTimeRef.current);
+        return `/api/remux?url=${encodeURIComponent(trimmed)}${ss > 0 ? `&ss=${ss}` : ''}`;
+      }
+
       const isAstraOrRestricted =
         trimmed.includes('/play/') ||
         trimmed.includes('?hls') ||
         trimmed.includes('|') ||
         trimmed.includes('rumsport') ||
         trimmed.includes('jagobd') ||
-        trimmed.includes('movielinkbd') ||
-        trimmed.includes('fast.movielinkbd') ||
         trimmed.includes('share.google');
 
-      const isDirectMedia =
-        trimmed.includes('.mkv') ||
-        trimmed.includes('.mp4') ||
-        trimmed.includes('movielinkbd') ||
-        trimmed.includes('fast.movielinkbd');
+      const isDirectMedia = trimmed.includes('.mp4') || trimmed.includes('.webm');
 
       // If page is HTTPS and stream is HTTP, or restricted stream, or direct file requiring CORS proxy
       if (forceProxy || (isPageHttps && isHttp) || isAstraOrRestricted || isDirectMedia) {
@@ -193,10 +213,42 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     []
   );
 
+  // Probe media metadata (duration, format, resolution) for direct media files
+  useEffect(() => {
+    if (!streamUrl) return;
+    const urlLower = streamUrl.toLowerCase();
+    const isFileMedia =
+      urlLower.includes('.mkv') ||
+      urlLower.includes('.mp4') ||
+      urlLower.includes('.avi') ||
+      urlLower.includes('movielinkbd') ||
+      urlLower.includes('r2.dev');
+
+    if (isFileMedia) {
+      fetch(`/api/probe?url=${encodeURIComponent(streamUrl)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.success) {
+            setProbeMeta(data);
+            if (data.duration && data.duration > 0) {
+              setDuration(data.duration);
+            }
+          }
+        })
+        .catch(() => {});
+    } else {
+      setProbeMeta(null);
+    }
+  }, [streamUrl]);
+
   // Initialize and load stream
   useEffect(() => {
     const video = videoRef.current;
     if (!streamUrl) return;
+
+    // Reset remux seek base time
+    remuxBaseTimeRef.current = 0;
+    setRemuxBaseTime(0);
 
     // Check YouTube first
     if (ytEmbedUrl) {
@@ -214,10 +266,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setHasTriedProxy(false);
 
     const urlLower = streamUrl.toLowerCase();
-    if (urlLower.includes('.m3u8')) setStreamFormat('HLS');
-    else if (urlLower.includes('.mpd')) setStreamFormat('DASH');
-    else if (urlLower.includes('.mkv') || urlLower.includes('movielinkbd')) setStreamFormat('Direct');
-    else setStreamFormat('MP4');
+    const isMkvOrRemuxTarget =
+      urlLower.includes('.mkv') ||
+      urlLower.includes('.avi') ||
+      urlLower.includes('movielinkbd') ||
+      urlLower.includes('fast.movielinkbd') ||
+      urlLower.includes('r2.dev');
+
+    if (isMkvOrRemuxTarget) {
+      setIsRemuxMode(true);
+      setStreamFormat('Remux');
+    } else if (urlLower.includes('.m3u8')) {
+      setIsRemuxMode(false);
+      setStreamFormat('HLS');
+    } else if (urlLower.includes('.mpd')) {
+      setIsRemuxMode(false);
+      setStreamFormat('DASH');
+    } else {
+      setIsRemuxMode(false);
+      setStreamFormat('MP4');
+    }
 
     setStatus({
       type: 'loading',
@@ -233,12 +301,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       streamUrl.includes('|') ||
       streamUrl.includes('rumsport') ||
       streamUrl.includes('jagobd') ||
-      streamUrl.includes('movielinkbd') ||
-      streamUrl.includes('fast.movielinkbd') ||
       streamUrl.includes('share.google');
     const shouldUseProxy = (isPageHttps && isHttp) || isAstraOrRestricted;
 
-    loadStreamSource(streamUrl, shouldUseProxy);
+    loadStreamSource(streamUrl, shouldUseProxy, isMkvOrRemuxTarget);
 
     // Fade out logo overlay after 3 seconds
     const logoTimer = setTimeout(() => {
@@ -251,14 +317,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     };
   }, [streamUrl, title, cleanupHls, ytEmbedUrl]);
 
-  // Core stream loader with Hls.js & native fallback
-  const loadStreamSource = (rawUrl: string, useProxy: boolean) => {
+  // Core stream loader with Hls.js, Remux & native fallback
+  const loadStreamSource = (rawUrl: string, useProxy: boolean, useRemux?: boolean) => {
     const video = videoRef.current;
     if (!video) return;
 
     cleanupHls();
-    const finalUrl = computePlayUrl(rawUrl, useProxy);
     const urlLower = rawUrl.toLowerCase();
+
+    const isRemuxTarget =
+      useRemux !== undefined
+        ? useRemux
+        : isRemuxMode ||
+          urlLower.includes('.mkv') ||
+          urlLower.includes('.avi') ||
+          urlLower.includes('movielinkbd') ||
+          urlLower.includes('fast.movielinkbd') ||
+          urlLower.includes('r2.dev');
+
+    if (isRemuxTarget) {
+      setStreamFormat('Remux');
+      setIsRemuxMode(true);
+      const finalUrl = computePlayUrl(rawUrl, false, true);
+      video.src = finalUrl;
+      video.play().catch(() => {});
+      setStatus({ type: 'playing', text: 'হাই-স্পিড রিম্যাক্স প্লে হচ্ছে' });
+      setTimeout(() => setStatus(null), 1800);
+      return;
+    }
+
+    const finalUrl = computePlayUrl(rawUrl, useProxy, false);
 
     // Check if direct media file (e.g. MKV, MP4, MOV, fast.movielinkbd)
     const isDirectMedia =
@@ -446,7 +534,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       type: 'loading',
       text: nextState ? 'প্রক্সি মোড চালু হচ্ছে...' : 'সরাসরি মোড চালু হচ্ছে...',
     });
-    loadStreamSource(streamUrl, nextState);
+    loadStreamSource(streamUrl, nextState, false);
+  };
+
+  // Switch remux mode manually
+  const toggleRemuxMode = () => {
+    const nextState = !isRemuxMode;
+    setIsRemuxMode(nextState);
+    remuxBaseTimeRef.current = 0;
+    setRemuxBaseTime(0);
+    setStatus({
+      type: 'loading',
+      text: nextState ? 'রিম্যাক্স মোড চালু হচ্ছে (Universal Remux)...' : 'স্ট্যান্ডার্ড মোড চালু হচ্ছে...',
+    });
+    loadStreamSource(streamUrl, false, nextState);
   };
 
   // Video element events
@@ -480,11 +581,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     };
 
     const onTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      setDuration(video.duration || 0);
+      if (isRemuxMode) {
+        setCurrentTime(remuxBaseTimeRef.current + video.currentTime);
+      } else {
+        setCurrentTime(video.currentTime);
+      }
+      if (video.duration && !isNaN(video.duration) && video.duration > 0 && !isRemuxMode) {
+        setDuration(video.duration);
+      }
     };
 
     const onError = () => {
+      // If error occurred and remux hasn't been engaged, try high-speed remux automatically!
+      if (!isRemuxMode) {
+        setIsRemuxMode(true);
+        setStatus({
+          type: 'loading',
+          text: 'সার্বজনীন রিম্যাক্স (Universal Remux) চালু হচ্ছে...',
+          subText: 'দয়া করে অপেক্ষা করুন'
+        });
+        loadStreamSource(streamUrl, false, true);
+        return;
+      }
+
       if (!isProxied && !hasTriedProxy) {
         setHasTriedProxy(true);
         setStatus({
@@ -492,14 +611,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           text: 'প্রক্সি সার্ভার দিয়ে রিট্রাই করা হচ্ছে...',
           subText: 'দয়া করে একটু অপেক্ষা করুন'
         });
-        loadStreamSource(streamUrl, true);
+        loadStreamSource(streamUrl, true, false);
         return;
       }
 
       setStatus({
         type: 'error',
         text: 'স্ট্রিম প্লে করা যাচ্ছে না',
-        subText: onFailover ? 'অন্য সার্ভার চেক করা হচ্ছে...' : 'দয়া করে অন্য চ্যানেল বেছে নিন'
+        subText: onFailover ? 'অন্য সার্ভার চেক করা হচ্ছে...' : 'বাহ্যিক প্লেয়ারে চেষ্টা করুন বা অন্য চ্যানেল বেছে নিন'
       });
       if (onFailover) {
         setTimeout(onFailover, 2000);
@@ -522,7 +641,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       video.removeEventListener('error', onError);
       wakeLockManager.current.release();
     };
-  }, [onFailover, resetControlsTimer, isProxied, hasTriedProxy, streamUrl]);
+  }, [onFailover, resetControlsTimer, isProxied, hasTriedProxy, isRemuxMode, streamUrl]);
 
   // Fullscreen and resize / orientation listener
   useEffect(() => {
@@ -763,7 +882,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const video = videoRef.current;
     if (!video || !duration) return;
     const seekPercent = parseFloat(e.target.value);
-    video.currentTime = (seekPercent / 100) * duration;
+    const targetSec = (seekPercent / 100) * duration;
+
+    if (isRemuxMode) {
+      remuxBaseTimeRef.current = targetSec;
+      setRemuxBaseTime(targetSec);
+      setCurrentTime(targetSec);
+      video.src = `/api/remux?url=${encodeURIComponent(streamUrl)}&ss=${Math.floor(targetSec)}`;
+      video.play().catch(() => {});
+    } else {
+      video.currentTime = targetSec;
+    }
   };
 
   const isPortrait = windowDimensions.width < windowDimensions.height;
@@ -942,6 +1071,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </div>
             )}
 
+            {/* Remux Mode indicator / toggle */}
+            {!ytEmbedUrl && (
+              <button
+                onClick={toggleRemuxMode}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                  isRemuxMode
+                    ? 'bg-cyan-500/25 text-cyan-300 border-cyan-500/50 shadow-sm'
+                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'
+                }`}
+                title="সার্বজনীন রিম্যাক্স টগল করুন (MKV ও সুরক্ষিত লিঙ্ক fMP4 এ কনভার্ট)"
+              >
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span className="hidden sm:inline">রিম্যাক্স {isRemuxMode ? 'চালু' : 'বন্ধ'}</span>
+              </button>
+            )}
+
             {/* Proxy Mode indicator / toggle */}
             {!ytEmbedUrl && (
               <button
@@ -958,8 +1103,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </button>
             )}
 
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-500/20 text-sky-400 border border-sky-500/40">
-              {streamFormat}
+            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+              isRemuxMode
+                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40'
+                : 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+            }`}>
+              {isRemuxMode ? 'Ultra Remux' : streamFormat}
             </span>
           </div>
         </div>
@@ -1190,29 +1339,108 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 })}
               </div>
 
-              {/* Utility actions: Proxy bypass & External stream link */}
-              <div className="pt-2 border-t border-white/10 flex flex-wrap gap-2 items-center justify-between">
-                <button
-                  onClick={toggleProxy}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                    isProxied
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>প্রক্সি: {isProxied ? 'চালু (Bypassed)' : 'বন্ধ (Direct)'}</span>
-                </button>
+              {/* Probed media specs card */}
+              {probeMeta && (
+                <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between font-semibold text-cyan-100">
+                    <span className="flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-cyan-400" />
+                      মিডিয়া ডিটেইলস
+                    </span>
+                    <span className="text-[11px] px-2 py-0.5 rounded bg-cyan-500/20 font-mono">
+                      {probeMeta.formattedDuration || (duration ? formatSeconds(duration) : 'Unknown')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300 font-mono pt-1 border-t border-cyan-500/20">
+                    <div>ভিডিও: {probeMeta.video?.codec?.toUpperCase()} ({probeMeta.video?.width}x{probeMeta.video?.height})</div>
+                    <div>অডিও: {probeMeta.audio?.codec?.toUpperCase()} ({probeMeta.audio?.channels} Ch)</div>
+                  </div>
+                </div>
+              )}
 
-                <a
-                  href={streamUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>সরাসরি লিঙ্ক</span>
-                </a>
+              {/* Utility actions: Remux, Proxy, VLC, MX Player & Direct stream link */}
+              <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={toggleRemuxMode}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      isRemuxMode
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/10'
+                        : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>রিম্যাক্স: {isRemuxMode ? 'চালু (fMP4)' : 'বন্ধ'}</span>
+                  </button>
+
+                  <button
+                    onClick={toggleProxy}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      isProxied
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                        : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>প্রক্সি: {isProxied ? 'চালু (Bypassed)' : 'বন্ধ'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {/* VLC Player Deep Link */}
+                  <a
+                    href={`vlc://${streamUrl}`}
+                    className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/30 transition-colors text-center"
+                    title="ভিএলসি প্লেয়ার দিয়ে ওপেন করুন"
+                  >
+                    <span>VLC প্লেয়ার</span>
+                  </a>
+
+                  {/* MX Player Android Deep Link */}
+                  <a
+                    href={`intent:${streamUrl}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end`}
+                    className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-colors text-center"
+                    title="এমএক্স প্লেয়ার দিয়ে ওপেন করুন"
+                  >
+                    <span>MX প্লেয়ার</span>
+                  </a>
+
+                  {/* Copy Link Button */}
+                  <button
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(streamUrl);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      }
+                    }}
+                    className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-300">কপি হয়েছে</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>লিঙ্ক কপি</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="pt-1 flex justify-end">
+                  <a
+                    href={streamUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>ব্রাউজারে সরাসরি ফাইলটি খুলুন</span>
+                  </a>
+                </div>
               </div>
             </div>
           </div>

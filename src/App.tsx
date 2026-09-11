@@ -8,6 +8,7 @@ import { MoviesView } from './components/MoviesView';
 import { PlaylistsView } from './components/PlaylistsView';
 import { MenuView } from './components/MenuView';
 import { Navigation } from './components/Navigation';
+import { AppDownloadWarningModal } from './components/AppDownloadWarningModal';
 import {
   Channel,
   LiveEvent,
@@ -38,9 +39,19 @@ import {
 } from './services/firebaseSync';
 
 export default function App() {
-  // App settings & view state
+  // App settings & view state - Default to 'live-tv' so visitors immediately access Live TV
   const [appMode, setAppMode] = useState<AppMode>('mobile');
-  const [currentTab, setCurrentTab] = useState<TabView>('events');
+  const [currentTab, setCurrentTab] = useState<TabView>('live-tv');
+
+  // App download warning modal for restricted content (Events & Movies)
+  const [downloadWarning, setDownloadWarning] = useState<{
+    isOpen: boolean;
+    itemTitle?: string;
+    itemType?: 'event' | 'movie';
+    itemImage?: string;
+  }>({
+    isOpen: false,
+  });
 
   // Content Data State
   const [m3uChannels, setM3uChannels] = useState<Channel[]>([]);
@@ -266,25 +277,32 @@ export default function App() {
     });
   };
 
-  // Play a live event
+  // Select a live event -> Show App Download Warning Modal as requested
   const handleSelectEvent = (event: LiveEvent) => {
-    const streamUrl = event.url || event.servers[0]?.url || '';
-    setActiveMedia({
-      url: streamUrl,
-      title: event.name || `${event.team1.name} vs ${event.team2.name}`,
-      logo: event.logo || event.team1.logo || DEFAULT_LOGO,
-      servers: event.servers || [{ name: 'Main', url: streamUrl }],
+    setDownloadWarning({
+      isOpen: true,
+      itemTitle: event.name || `${event.team1?.name || ''} vs ${event.team2?.name || ''}`,
+      itemType: 'event',
+      itemImage: event.logo || event.banner || event.team1?.logo,
     });
   };
 
-  // Play a movie
+  // Select a movie/series -> Show App Download Warning Modal as requested
   const handleSelectMovie = (movie: Movie) => {
-    const streamUrl = movie.url || movie.servers[0]?.url || '';
-    setActiveMedia({
-      url: streamUrl,
-      title: movie.name,
-      logo: movie.poster,
-      servers: movie.servers || [{ name: 'Main', url: streamUrl }],
+    setDownloadWarning({
+      isOpen: true,
+      itemTitle: movie.name,
+      itemType: 'movie',
+      itemImage: movie.poster,
+    });
+  };
+
+  const handleOpenAppDownload = (title?: string, type?: 'event' | 'movie', image?: string) => {
+    setDownloadWarning({
+      isOpen: true,
+      itemTitle: title || 'অফিসিয়াল অ্যান্ড্রয়েড অ্যাপ',
+      itemType: type || 'event',
+      itemImage: image,
     });
   };
 
@@ -395,6 +413,7 @@ export default function App() {
         onRefreshData={handleRefreshData}
         isFirebaseConnected={isFirebaseConnected}
         activeUsersCount={activeUsersCount}
+        onOpenAppDownload={() => handleOpenAppDownload()}
       />
 
       {/* Marquee Notice Banner from Firebase */}
@@ -423,7 +442,11 @@ export default function App() {
 
         {/* Tab Views */}
         {currentTab === 'events' && (
-          <EventsView events={events} onSelectEvent={handleSelectEvent} />
+          <EventsView
+            events={events}
+            onSelectEvent={handleSelectEvent}
+            onOpenAppDownload={() => handleOpenAppDownload('লাইভ স্পোর্টস ইভেন্ট', 'event')}
+          />
         )}
 
         {currentTab === 'live-tv' && (
@@ -441,7 +464,11 @@ export default function App() {
         )}
 
         {currentTab === 'movies' && (
-          <MoviesView movies={movies} onSelectMovie={handleSelectMovie} />
+          <MoviesView
+            movies={movies}
+            onSelectMovie={handleSelectMovie}
+            onOpenAppDownload={() => handleOpenAppDownload('সিনেমা ও ওয়েব সিরিজ', 'movie')}
+          />
         )}
 
         {currentTab === 'playlist' && (
@@ -463,6 +490,19 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* App Download Warning Modal */}
+      <AppDownloadWarningModal
+        isOpen={downloadWarning.isOpen}
+        onClose={() => setDownloadWarning((prev) => ({ ...prev, isOpen: false }))}
+        itemTitle={downloadWarning.itemTitle}
+        itemType={downloadWarning.itemType}
+        itemImage={downloadWarning.itemImage}
+        onGoToLiveTv={() => {
+          setDownloadWarning((prev) => ({ ...prev, isOpen: false }));
+          setCurrentTab('live-tv');
+        }}
+      />
 
       {/* Navigation (Bottom for Mobile, Sidebar for TV) */}
       <Navigation

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlayCircle, Tv, RotateCcw, Bell } from 'lucide-react';
+import { PlayCircle, Tv, RotateCcw, Bell, Download } from 'lucide-react';
 import { AppMode, TabView } from '../types';
 
 interface HeaderProps {
@@ -9,6 +9,7 @@ interface HeaderProps {
   onRefreshData: () => void;
   isFirebaseConnected?: boolean;
   activeUsersCount?: number;
+  onOpenAppDownload?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRefreshData,
   isFirebaseConnected = true,
   activeUsersCount = 0,
+  onOpenAppDownload,
 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
@@ -66,6 +68,25 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action buttons matching screenshot */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* App Download Button */}
+          <a
+            href="https://nfiptv24.blogspot.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              if (onOpenAppDownload) {
+                e.preventDefault();
+                onOpenAppDownload();
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 shadow-md shadow-orange-500/20 transition-all cursor-pointer"
+            title="অফিসিয়াল অ্যান্ড্রয়েড অ্যাপ ডাউনলোড করুন"
+          >
+            <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span className="hidden sm:inline">অ্যাপ ডাউনলোড</span>
+            <span className="sm:hidden">অ্যাপ</span>
+          </a>
+
           {/* TV Mode Pill Button: 📺 টিভি মোড */}
           <button
             onClick={() => onSetAppMode(appMode === 'tv' ? 'mobile' : 'tv')}

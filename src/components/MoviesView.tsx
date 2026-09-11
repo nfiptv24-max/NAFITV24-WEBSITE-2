@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { Film, Play, Search, Star, Layers, X } from 'lucide-react';
+import { Film, Play, Search, Star, Layers, X, Smartphone, Download, Lock } from 'lucide-react';
 import { Movie, StreamServer } from '../types';
 import { DEFAULT_POSTER } from '../data/defaultData';
 
 interface MoviesViewProps {
   movies: Movie[];
   onSelectMovie: (movie: Movie) => void;
+  onOpenAppDownload?: () => void;
 }
 
-export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie }) => {
+export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie, onOpenAppDownload }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeSeriesModal, setActiveSeriesModal] = useState<Movie | null>(null);
@@ -108,6 +109,47 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
         ))}
       </div>
 
+      {/* App Requirement Warning Banner */}
+      <div
+        onClick={() => {
+          if (onOpenAppDownload) {
+            onOpenAppDownload();
+          } else if (movies.length > 0) {
+            onSelectMovie(movies[0]);
+          }
+        }}
+        className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/5 border border-amber-500/35 flex items-center justify-between gap-3 text-xs cursor-pointer hover:border-amber-500/60 transition-all shadow-md shadow-amber-950/20"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+            <Smartphone className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5 flex-wrap">
+              <span>সিনেমা ও ওয়েব সিরিজ দেখতে অ্যাপ ব্যবহার করুন</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase font-black">
+                App Required
+              </span>
+            </div>
+            <p className="text-slate-300 text-[11px] truncate mt-0.5">
+              ওয়েবসাইটে শুধুমাত্র লাইভ টিভি চালু আছে। মুভি প্লে করতে অফিসিয়াল অ্যান্ড্রয়েড অ্যাপ ডাউনলোড করুন।
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onOpenAppDownload) onOpenAppDownload();
+            else onSelectMovie(movies[0] || ({ name: 'মুভি ও সিরিজ' } as any));
+          }}
+          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black shrink-0 shadow-md flex items-center gap-1.5 text-xs transition-transform active:scale-95 cursor-pointer"
+        >
+          <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span className="hidden sm:inline">অ্যাপ ডাউনলোড</span>
+          <span className="sm:hidden">ডাউনলোড</span>
+        </button>
+      </div>
+
       {/* Movies Grid */}
       {filteredMovies.length === 0 ? (
         <div className="text-center py-12 px-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400">
@@ -131,7 +173,7 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
               <div
                 key={movie.id || idx}
                 onClick={() => handlePlayMovieOrOpenEpisodes(movie)}
-                className="group relative rounded-xl overflow-hidden bg-slate-900 border border-white/10 hover:border-blue-500/50 shadow-md hover:shadow-xl transition-all cursor-pointer flex flex-col"
+                className="group relative rounded-xl overflow-hidden bg-slate-900 border border-white/10 hover:border-amber-500/50 shadow-md hover:shadow-xl transition-all cursor-pointer flex flex-col"
               >
                 {/* Poster 2:3 Aspect ratio */}
                 <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
@@ -146,10 +188,10 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity"></div>
 
-                  {/* Hover Play Button */}
+                  {/* Hover Play / Lock Indicator */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/50 transform group-hover:scale-110 transition-transform">
-                      <Play className="w-5 h-5 fill-white ml-0.5" />
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/50 transform group-hover:scale-110 transition-transform">
+                      <Lock className="w-5 h-5 text-slate-950" />
                     </div>
                   </div>
 
@@ -183,7 +225,7 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
                 {/* Title & Info */}
                 <div className="p-2.5 flex-1 flex flex-col justify-between">
                   <div>
-                    <h4 className="text-xs font-bold text-white group-hover:text-sky-300 line-clamp-1 transition-colors">
+                    <h4 className="text-xs font-bold text-white group-hover:text-amber-300 line-clamp-1 transition-colors">
                       {movie.name}
                     </h4>
                     {movie.description && (
@@ -194,8 +236,9 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
                   </div>
                   <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400 border-t border-white/5 pt-1.5">
                     <span>{movie.language || 'HD Stream'}</span>
-                    <span className="text-blue-400 font-semibold flex items-center gap-0.5">
-                      {hasMultipleEpisodes ? 'পর্ব নির্বাচন' : 'প্লে করুন'}
+                    <span className="text-amber-400 font-semibold flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5 text-amber-400" />
+                      {hasMultipleEpisodes ? 'পর্ব নির্বাচন' : 'অ্যাপ প্রয়োজন'}
                     </span>
                   </div>
                 </div>
@@ -236,6 +279,10 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
 
             {/* Episodes List */}
             <div className="p-4 overflow-y-auto flex-1 space-y-2">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2 mb-2">
+                <Smartphone className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>পর্ব দেখার জন্য অফিসিয়াল অ্যাপ ইনস্টল করতে হবে</span>
+              </div>
               <p className="text-xs font-semibold text-slate-300 mb-2">
                 যে পর্বটি দেখতে চান নির্বাচন করুন:
               </p>
@@ -244,28 +291,34 @@ export const MoviesView: React.FC<MoviesViewProps> = ({ movies, onSelectMovie })
                   <button
                     key={sIdx}
                     onClick={() => handleSelectEpisode(activeSeriesModal, srv)}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-blue-600/30 border border-white/10 hover:border-blue-500/50 text-left transition-all cursor-pointer group"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/40 text-left transition-all cursor-pointer group"
                   >
-                    <span className="text-xs font-medium text-slate-200 group-hover:text-white truncate">
+                    <span className="text-xs font-medium text-slate-200 group-hover:text-amber-200 truncate">
                       {srv.name}
                     </span>
-                    <Play className="w-3.5 h-3.5 text-blue-400 group-hover:text-white shrink-0 ml-1.5" />
+                    <Lock className="w-3.5 h-3.5 text-amber-400 group-hover:text-amber-300 shrink-0 ml-1.5" />
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3 bg-white/5 border-t border-white/10 flex justify-end">
+            <div className="p-3 bg-white/5 border-t border-white/10 flex justify-end gap-2">
+              <button
+                onClick={() => setActiveSeriesModal(null)}
+                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium transition-colors"
+              >
+                বন্ধ করুন
+              </button>
               <button
                 onClick={() => {
                   onSelectMovie(activeSeriesModal);
                   setActiveSeriesModal(null);
                 }}
-                className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                <Play className="w-3.5 h-3.5 fill-white" />
-                ১ম পর্ব চালু করুন
+                <Lock className="w-3.5 h-3.5 text-slate-950" />
+                ১ম পর্ব দেখুন (অ্যাপ প্রয়োজন)
               </button>
             </div>
           </div>

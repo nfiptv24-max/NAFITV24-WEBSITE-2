@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Play, Clock, Hourglass } from 'lucide-react';
+import { Trophy, Clock, Hourglass, Smartphone, Download, Lock } from 'lucide-react';
 import { LiveEvent } from '../types';
 import { DEFAULT_LOGO } from '../data/defaultData';
 
 interface EventsViewProps {
   events: LiveEvent[];
   onSelectEvent: (event: LiveEvent) => void;
+  onOpenAppDownload?: () => void;
 }
 
-export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent }) => {
+export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent, onOpenAppDownload }) => {
   const [selectedSport, setSelectedSport] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [now, setNow] = useState(Date.now());
@@ -130,6 +131,47 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
         })}
       </div>
 
+      {/* App Requirement Warning Banner */}
+      <div
+        onClick={() => {
+          if (onOpenAppDownload) {
+            onOpenAppDownload();
+          } else if (events.length > 0) {
+            onSelectEvent(events[0]);
+          }
+        }}
+        className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/5 border border-amber-500/35 flex items-center justify-between gap-3 text-xs cursor-pointer hover:border-amber-500/60 transition-all shadow-md shadow-amber-950/20"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+            <Smartphone className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5 flex-wrap">
+              <span>লাইভ স্পোর্টস ইভেন্ট দেখতে অবশ্যই অ্যাপ প্রয়োজন</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase font-black">
+                App Required
+              </span>
+            </div>
+            <p className="text-slate-300 text-[11px] truncate mt-0.5">
+              ওয়েবসাইটে শুধুমাত্র লাইভ টিভি চ্যানেল চালু রয়েছে। ক্রিকেট ও ফুটবল ম্যাচ লাইভ দেখতে অ্যাপ ডাউনলোড করুন।
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onOpenAppDownload) onOpenAppDownload();
+            else onSelectEvent(events[0] || ({ name: 'লাইভ স্পোর্টস ইভেন্ট' } as any));
+          }}
+          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black shrink-0 shadow-md flex items-center gap-1.5 text-xs transition-transform active:scale-95 cursor-pointer"
+        >
+          <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span className="hidden sm:inline">অ্যাপ ডাউনলোড</span>
+          <span className="sm:hidden">ডাউনলোড</span>
+        </button>
+      </div>
+
       {/* Events List Cards */}
       {filteredEvents.length === 0 ? (
         <div className="text-center py-12 px-4 rounded-2xl bg-[#0c1220] border border-slate-800/80 text-slate-400">
@@ -146,7 +188,8 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
             return (
               <div
                 key={ev.id || index}
-                className="group relative p-3 sm:p-3.5 rounded-2xl bg-[#0c1220] hover:bg-[#0f172a] border border-slate-800/80 hover:border-blue-500/40 shadow-xl transition-all overflow-hidden"
+                onClick={() => onSelectEvent(ev)}
+                className="group relative p-3 sm:p-3.5 rounded-2xl bg-[#0c1220] hover:bg-[#0f172a] border border-slate-800/80 hover:border-amber-500/50 shadow-xl transition-all overflow-hidden cursor-pointer"
               >
                 <div className="flex flex-row items-stretch gap-3 sm:gap-4">
                   {/* Left Column: Single Match/Channel Logo & Tournament Pill */}
@@ -202,7 +245,7 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
 
                     {/* Match Title */}
                     <h4
-                      className="text-xs sm:text-[13px] font-bold text-white line-clamp-1 group-hover:text-sky-300 transition-colors"
+                      className="text-xs sm:text-[13px] font-bold text-white line-clamp-1 group-hover:text-amber-300 transition-colors"
                       title={ev.name || `${ev.team1.name} vs ${ev.team2.name}`}
                     >
                       {ev.name || `${ev.team1.name} vs ${ev.team2.name} | ${ev.tournament}`}
@@ -217,13 +260,16 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
                           <span>ম্যাচটি এখন লাইভ চলছে</span>
                         </div>
 
-                        {/* Watch Live Button */}
+                        {/* Watch Live Button (App Required) */}
                         <button
-                          onClick={() => onSelectEvent(ev)}
-                          className="w-full py-1.5 px-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-md shadow-red-600/20 transition-all active:scale-[0.98] cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEvent(ev);
+                          }}
+                          className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-slate-950 font-black text-xs text-center flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition-all active:scale-[0.98] cursor-pointer"
                         >
-                          <Play className="w-3.5 h-3.5 fill-white" />
-                          <span>লাইভ দেখুন</span>
+                          <Lock className="w-3.5 h-3.5 text-slate-950" />
+                          <span>লাইভ দেখুন (অ্যাপ প্রয়োজন)</span>
                         </button>
                       </div>
                     ) : (
@@ -234,13 +280,16 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onSelectEvent })
                           <span>বাকি: {formatCountdownTimer(ev.startTime)}</span>
                         </div>
 
-                        {/* Channel Link Coming Box / Optional Preview Button */}
+                        {/* Channel Link Box */}
                         <button
-                          onClick={() => onSelectEvent(ev)}
-                          className="w-full py-1.5 px-3 rounded-lg bg-[#111827] border border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-white text-xs font-medium text-center flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEvent(ev);
+                          }}
+                          className="w-full py-1.5 px-3 rounded-lg bg-[#111827] border border-amber-500/30 hover:border-amber-500/50 text-amber-300 hover:text-white text-xs font-medium text-center flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          <Hourglass className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>চ্যানেল লিংক আসছে</span>
+                          <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span>ম্যাচ লিংক (অ্যাপে চালু হবে)</span>
                         </button>
                       </div>
                     )}

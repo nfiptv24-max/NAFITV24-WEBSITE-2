@@ -51,22 +51,29 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, appMode, onS
     <nav className="fixed bottom-0 inset-x-0 bg-[#080d1a]/95 backdrop-blur-lg border-t border-slate-800/80 z-40 py-1.5 px-2 flex justify-around items-center shadow-2xl">
       {navItems.map((item) => {
         const isActive = currentTab === item.id;
+        const isRestricted = item.id === 'events' || item.id === 'movies';
+
         return (
           <button
             key={item.id}
             onClick={() => onSelectTab(item.id)}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer relative ${
               isActive
                 ? 'text-[#22d3ee] font-bold'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <div
-              className={`p-1 rounded-xl transition-all ${
+              className={`p-1 rounded-xl transition-all relative ${
                 isActive ? 'bg-cyan-500/15 text-[#22d3ee]' : ''
               }`}
             >
               {item.icon}
+              {isRestricted && (
+                <span className="absolute -top-1 -right-1 px-1 py-0.2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-[8px] font-black leading-none shadow-sm">
+                  APP
+                </span>
+              )}
             </div>
             <span className="text-[11px] font-medium tracking-tight mt-0.5">
               {item.label}

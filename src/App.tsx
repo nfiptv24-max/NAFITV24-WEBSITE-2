@@ -48,6 +48,10 @@ export default function App() {
   const [events, setEvents] = useState<LiveEvent[]>(INITIAL_EVENTS);
   const [movies, setMovies] = useState<Movie[]>(INITIAL_MOVIES);
   const [playlists, setPlaylists] = useState<Playlist[]>(INITIAL_PLAYLISTS);
+  const [activePlaylistName, setActivePlaylistName] = useState<string>('FAST IPTV (Z BDIX)');
+  const [activePlaylistUrl, setActivePlaylistUrl] = useState<string>(
+    'https://raw.githubusercontent.com/ahan443/FAST-IPTV/refs/heads/main/z.m3u'
+  );
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
 
@@ -207,6 +211,11 @@ export default function App() {
         const parsed = parseM3U(text);
         if (parsed.length > 0) {
           setM3uChannels(parsed);
+          const found = playlists.find((p) => p.url === src);
+          if (found) {
+            setActivePlaylistName(found.name);
+            setActivePlaylistUrl(found.url);
+          }
           setIsLoadingChannels(false);
           return;
         }
@@ -318,6 +327,8 @@ export default function App() {
       const parsed = parseM3U(text);
       if (parsed.length > 0) {
         setM3uChannels(parsed);
+        setActivePlaylistName(title);
+        setActivePlaylistUrl(url);
         setCurrentTab('live-tv');
         showToast(`✅ ${parsed.length} টি চ্যানেল লোড হয়েছে (${title})`);
       } else {
@@ -422,6 +433,10 @@ export default function App() {
             onSelectChannel={handleSelectChannel}
             onReloadChannels={handleRefreshData}
             isLoading={isLoadingChannels}
+            playlists={playlists}
+            activePlaylistUrl={activePlaylistUrl}
+            activePlaylistName={activePlaylistName}
+            onSelectPlaylist={(pl) => handleLoadPlaylistUrl(pl.url, pl.name)}
           />
         )}
 

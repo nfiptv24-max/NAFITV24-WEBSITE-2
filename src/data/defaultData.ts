@@ -4,6 +4,7 @@ export const DEFAULT_LOGO = "https://cdn-icons-png.flaticon.com/512/716/716429.p
 export const DEFAULT_POSTER = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80";
 
 export const M3U_SOURCES = [
+  'https://raw.githubusercontent.com/ahan443/FAST-IPTV/refs/heads/main/z.m3u',
   'https://raw.githubusercontent.com/nafitv24-web/NAFI-TV/refs/heads/main/Update%20Channel.m3u',
   'https://raw.githubusercontent.com/nfiptv24-max/NAFITV/refs/heads/main/Nafitv24.m3u',
   'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/22.m3u',
@@ -290,6 +291,18 @@ export const INITIAL_MOVIES: Movie[] = [
 ];
 
 export const INITIAL_PLAYLISTS: Playlist[] = [
+  {
+    name: 'FAST IPTV (Z BDIX)',
+    url: 'https://raw.githubusercontent.com/ahan443/FAST-IPTV/refs/heads/main/z.m3u',
+    logo: 'https://cdn-icons-png.flaticon.com/512/3172/3172555.png',
+    description: '130+ Bangladeshi & International BDIX Live TV Channels'
+  },
+  {
+    name: 'NAFI TV (Update Channel)',
+    url: 'https://raw.githubusercontent.com/nafitv24-web/NAFI-TV/refs/heads/main/Update%20Channel.m3u',
+    logo: 'https://cdn-icons-png.flaticon.com/512/716/716429.png',
+    description: 'NAFI Official TV & Movie Channels'
+  },
   {
     name: 'NAFI Sports HD',
     url: 'https://raw.githubusercontent.com/nfiptv24-max/NAFITV/refs/heads/main/Nafitv24.m3u',

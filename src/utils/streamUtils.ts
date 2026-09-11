@@ -1,6 +1,21 @@
 import { Channel } from '../types';
 import { DEFAULT_LOGO } from '../data/defaultData';
 
+// Normalize Unicode mathematical stylized characters to standard ASCII/Unicode
+export function normalizeUnicodeText(text: string): string {
+  if (!text) return '';
+  return text
+    // Mathematical Bold Capital (0x1D400 - 0x1D419) -> A-Z
+    .replace(/[\uD835][\uDC00-\uDC19]/g, (c) => String.fromCharCode(c.codePointAt(0)! - 0x1D400 + 65))
+    // Mathematical Bold Small (0x1D41A - 0x1D433) -> a-z
+    .replace(/[\uD835][\uDC1A-\uDC33]/g, (c) => String.fromCharCode(c.codePointAt(0)! - 0x1D41A + 97))
+    // Mathematical Sans-Serif Bold Capital (0x1D5D4 - 0x1D5ED) -> A-Z
+    .replace(/[\uD835][\uDDD4-\uDDED]/g, (c) => String.fromCharCode(c.codePointAt(0)! - 0x1D5D4 + 65))
+    // Mathematical Sans-Serif Bold Small (0x1D5EE - 0x1D607) -> a-z
+    .replace(/[\uD835][\uDDEE-\uDE07]/g, (c) => String.fromCharCode(c.codePointAt(0)! - 0x1D5EE + 97))
+    .trim();
+}
+
 export function parseM3U(text: string): Channel[] {
   const trimmed = text.trim();
 
@@ -113,13 +128,13 @@ export function parseM3U(text: string): Channel[] {
 
       const groupMatch = line.match(/group-title="([^"]+)"/i);
       if (groupMatch && groupMatch[1]) {
-        current.category = groupMatch[1];
+        current.category = normalizeUnicodeText(groupMatch[1]);
       }
 
       const commaIndex = line.lastIndexOf(',');
       if (commaIndex !== -1) {
         const name = line.substring(commaIndex + 1).trim();
-        if (name) current.name = name;
+        if (name) current.name = normalizeUnicodeText(name);
       }
       continue;
     }
@@ -127,8 +142,21 @@ export function parseM3U(text: string): Channel[] {
     if (current && line && !line.startsWith('#')) {
       const streamUrl = line;
       current.url = streamUrl;
-      current.servers = [{ name: 'Main', url: streamUrl }];
-      channels.push(current as Channel);
+      current.servers = [{ name: 'Server 1', url: streamUrl }];
+
+      // Check if channel already exists; if so, add as another server option
+      const existing = channels.find(c => c.name.toLowerCase() === current!.name?.toLowerCase());
+      if (existing && streamUrl !== existing.url) {
+        if (!existing.servers) {
+          existing.servers = [{ name: 'Server 1', url: existing.url }];
+        }
+        existing.servers.push({
+          name: `Server ${existing.servers.length + 1}`,
+          url: streamUrl
+        });
+      } else {
+        channels.push(current as Channel);
+      }
       current = null;
     }
   }
@@ -141,7 +169,7 @@ export function parseM3U(text: string): Channel[] {
         name: `Stream Channel ${idx + 1}`,
         logo: DEFAULT_LOGO,
         url: u,
-        servers: [{ name: 'Main', url: u }]
+        servers: [{ name: 'Server 1', url: u }]
       });
     });
   }

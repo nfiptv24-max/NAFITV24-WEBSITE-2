@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Check,
   RotateCw,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { StreamServer } from '../types';
 import { DEFAULT_LOGO } from '../data/defaultData';
@@ -106,17 +108,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }, 4000);
   }, []);
 
-  // Toggle controls on screen tap/click: if open -> hide immediately; if closed -> show and start auto-hide
+  // Track if user explicitly clicked to hide controls
+  const userManuallyHiddenRef = useRef<boolean>(false);
+
+  // Toggle controls on screen tap/click or button click: if open -> hide immediately; if closed -> show and start auto-hide
   const handleToggleControls = useCallback((e?: React.MouseEvent) => {
     if (e) {
+      e.stopPropagation();
       const target = e.target as HTMLElement;
-      if (target && target.closest && target.closest('button, input, select, a, [role="button"]')) {
+      if (target && target.closest && target.closest('button, input, select, a, [role="button"], [role="slider"]')) {
         return;
       }
     }
     setShowControls((prev) => {
       const next = !prev;
       if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+      userManuallyHiddenRef.current = !next;
       if (next) {
         startAutoHideTimer();
       }
@@ -124,8 +131,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     });
   }, [startAutoHideTimer]);
 
-  // When mouse moves on desktop, reveal controls and reset timer
+  // When mouse moves on desktop, reveal controls only if user did not manually click to hide them
   const handleMouseMove = useCallback(() => {
+    if (userManuallyHiddenRef.current) {
+      return;
+    }
     setShowControls(true);
     startAutoHideTimer();
   }, [startAutoHideTimer]);
@@ -812,7 +822,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             crossOrigin="anonymous"
             className="absolute inset-0 w-full h-full cursor-pointer"
             style={{ objectFit: zoomMode }}
-            onClick={handleToggleControls}
             onDoubleClick={togglePlay}
           />
         )}
@@ -848,12 +857,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
         )}
 
+        {/* Floating Quick Button to Restore Controls when Hidden */}
+        {!showControls && !ytEmbedUrl && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleControls();
+            }}
+            className="absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-full bg-black/75 hover:bg-black/95 backdrop-blur-md border border-white/20 text-white text-xs font-medium flex items-center gap-1.5 shadow-2xl transition-all cursor-pointer opacity-80 hover:opacity-100 hover:scale-105 active:scale-95"
+            title="কন্ট্রোল বার দেখান (Show Controls)"
+          >
+            <Eye className="w-3.5 h-3.5 text-sky-400" />
+            <span className="text-[11px]">কন্ট্রোল দেখান</span>
+          </button>
+        )}
+
         {/* Top Header Controls Overlay */}
         <div
-          className={`absolute top-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between gap-3 z-30 transition-opacity duration-300 ${
+          className={`absolute top-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between gap-3 z-30 transition-opacity duration-300 cursor-pointer ${
             showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            if (!target || !target.closest('button, input, select, a, [role="button"]')) {
+              handleToggleControls(e);
+            }
+          }}
         >
           {/* Close Button & Channel Name */}
           <div className="flex items-center gap-3 min-w-0">
@@ -938,14 +967,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         {/* Bottom Custom Controls Bar (hidden for YouTube embed which has native controls) */}
         {!ytEmbedUrl && (
           <div
-            className={`absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col gap-2 z-30 transition-opacity duration-300 ${
+            className={`absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col gap-2 z-30 transition-opacity duration-300 cursor-pointer ${
               showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              const target = e.target as HTMLElement;
+              if (!target || !target.closest('button, input, select, a, [role="button"], [role="slider"]')) {
+                handleToggleControls(e);
+              }
+            }}
           >
             {/* Progress Seek Bar (if media has known duration) */}
             {duration > 0 && isFinite(duration) && (
-              <div className="flex items-center gap-3 w-full">
+              <div className="flex items-center gap-3 w-full" onClick={(e) => e.stopPropagation()}>
                 <span className="text-[11px] text-slate-300 font-mono w-10 text-right">
                   {formatSeconds(currentTime)}
                 </span>
@@ -1028,8 +1062,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 )}
               </div>
 
-              {/* Right Controls: Aspect Ratio Zoom, Rotate, Fullscreen */}
+              {/* Right Controls: Hide, Aspect Ratio Zoom, Rotate, Fullscreen */}
               <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Hide Controls Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleControls();
+                  }}
+                  className="px-2 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  title="কন্ট্রোল বার হাইড করুন"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[11px] hidden sm:inline">হাইড</span>
+                </button>
+
                 <button
                   onClick={cycleZoom}
                   className="px-2 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"

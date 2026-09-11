@@ -182,11 +182,41 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
     }
 
     const contentType = (upstreamRes.headers.get('content-type') || '').toLowerCase();
-    const isM3U8 =
-      contentType.includes('mpegurl') ||
-      contentType.includes('x-mpegurl') ||
-      targetUrl.toLowerCase().includes('.m3u8') ||
-      targetUrl.toLowerCase().includes('index.m3u8');
+
+    // Check if target is a known binary media segment or key
+    const isKeyRequest =
+      targetUrl.includes('&key=') ||
+      targetUrl.includes('?key=') ||
+      targetUrl.includes('/key') ||
+      targetUrl.endsWith('.key');
+
+    const isExplicitBinary =
+      targetUrl.includes('.ts') ||
+      targetUrl.includes('.mp4') ||
+      targetUrl.includes('.m4s') ||
+      targetUrl.includes('.mkv') ||
+      targetUrl.includes('.aac') ||
+      targetUrl.includes('.mp3') ||
+      targetUrl.includes('.webm') ||
+      targetUrl.includes('&segment=') ||
+      targetUrl.includes('_seg_') ||
+      contentType.includes('video/mp2t') ||
+      contentType.includes('video/mp4') ||
+      isKeyRequest;
+
+    const couldBePlaylist =
+      !isExplicitBinary &&
+      (contentType.includes('mpegurl') ||
+        contentType.includes('x-mpegurl') ||
+        contentType.includes('text/') ||
+        contentType.includes('application/octet-stream') ||
+        contentType === '' ||
+        targetUrl.toLowerCase().includes('.m3u8') ||
+        targetUrl.toLowerCase().includes('index.m3u8') ||
+        targetUrl.toLowerCase().includes('live.php') ||
+        targetUrl.toLowerCase().includes('chunks=') ||
+        targetUrl.toLowerCase().includes('playlist') ||
+        targetUrl.toLowerCase().includes('manifest'));
 
     // Forward status code (e.g. 200 or 206 Partial Content)
     res.statusCode = upstreamRes.status;
@@ -198,18 +228,22 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
       if (val) res.setHeader(h, val);
     }
 
-    if (isM3U8 && req.method !== 'HEAD') {
+    if (couldBePlaylist && req.method !== 'HEAD') {
       const text = await upstreamRes.text();
+      const trimmedHead = text.trim();
 
-      // Check if it's M3U format
-      if (text.trim().startsWith('#EXTM3U') || text.includes('#EXTINF') || text.includes('#EXT-X-STREAM-INF')) {
+      // Check if it's M3U format (either starts with #EXTM3U or contains HLS tags)
+      if (
+        trimmedHead.startsWith('#EXTM3U') ||
+        text.includes('#EXTINF') ||
+        text.includes('#EXT-X-STREAM-INF') ||
+        text.includes('#EXT-X-TARGETDURATION')
+      ) {
         const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
         // ASTRA / CESBO / SINGLE-VARIANT UNWRAPPING:
-        // If this is a master playlist containing variant stream(s) pointing to temporary or rotating playlists,
-        // and has only 1 variant or is an Astra /play/ stream, immediately fetch that child variant and return
-        // its media playlist directly.
-        // This keeps the player continuously refreshing the master URL, ensuring active live segments and preventing 404 crashes.
+        // If this is a master playlist containing a single variant stream pointing to temporary or rotating playlists,
+        // immediately fetch that child variant and return its media playlist directly.
         const streamInfIdx = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
         const variantUrls = lines.filter((l) => !l.startsWith('#'));
 
@@ -247,14 +281,29 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
         res.setHeader('Content-Length', Buffer.byteLength(rewritten).toString());
         res.end(rewritten);
         return;
+      } else {
+        // If it was text/html or text/plain that was NOT M3U, return as is
+        res.setHeader('Content-Type', contentType || 'text/plain; charset=utf-8');
+        res.setHeader('Content-Length', Buffer.byteLength(text).toString());
+        res.end(text);
+        return;
       }
     }
 
-    // Direct streaming for TS segments, MP4, MKV, WebM, etc.
+    // Direct streaming for TS segments, MP4, MKV, WebM, AES keys, etc.
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Accept-Ranges', 'bytes');
 
-    if (contentType) {
+    if (isKeyRequest) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+    } else if (
+      targetUrl.endsWith('.ts') ||
+      targetUrl.includes('.ts?') ||
+      targetUrl.includes('_seg_') ||
+      targetUrl.includes('&segment=')
+    ) {
+      res.setHeader('Content-Type', 'video/mp2t');
+    } else if (contentType) {
       if (
         contentType.includes('matroska') ||
         contentType.includes('mkv') ||
@@ -265,12 +314,10 @@ export async function handleStreamProxy(req: IncomingMessage, res: ServerRespons
       } else {
         res.setHeader('Content-Type', contentType);
       }
-    } else if (targetUrl.endsWith('.ts') || targetUrl.includes('.ts?')) {
-      res.setHeader('Content-Type', 'video/mp2t');
     } else if (targetUrl.endsWith('.mp4')) {
       res.setHeader('Content-Type', 'video/mp4');
     } else {
-      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Content-Type', 'video/mp2t');
     }
 
     if (req.method === 'HEAD' || !upstreamRes.body) {

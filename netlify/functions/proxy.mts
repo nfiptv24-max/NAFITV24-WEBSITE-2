@@ -151,11 +151,41 @@ export default async (req: Request): Promise<Response> => {
     }
 
     const contentType = (upstreamRes.headers.get('content-type') || '').toLowerCase();
-    const isM3U8 =
-      contentType.includes('mpegurl') ||
-      contentType.includes('x-mpegurl') ||
-      targetUrl.toLowerCase().includes('.m3u8') ||
-      targetUrl.toLowerCase().includes('index.m3u8');
+
+    // Check if target is a known binary media segment or key
+    const isKeyRequest =
+      targetUrl.includes('&key=') ||
+      targetUrl.includes('?key=') ||
+      targetUrl.includes('/key') ||
+      targetUrl.endsWith('.key');
+
+    const isExplicitBinary =
+      targetUrl.includes('.ts') ||
+      targetUrl.includes('.mp4') ||
+      targetUrl.includes('.m4s') ||
+      targetUrl.includes('.mkv') ||
+      targetUrl.includes('.aac') ||
+      targetUrl.includes('.mp3') ||
+      targetUrl.includes('.webm') ||
+      targetUrl.includes('&segment=') ||
+      targetUrl.includes('_seg_') ||
+      contentType.includes('video/mp2t') ||
+      contentType.includes('video/mp4') ||
+      isKeyRequest;
+
+    const couldBePlaylist =
+      !isExplicitBinary &&
+      (contentType.includes('mpegurl') ||
+        contentType.includes('x-mpegurl') ||
+        contentType.includes('text/') ||
+        contentType.includes('application/octet-stream') ||
+        contentType === '' ||
+        targetUrl.toLowerCase().includes('.m3u8') ||
+        targetUrl.toLowerCase().includes('index.m3u8') ||
+        targetUrl.toLowerCase().includes('live.php') ||
+        targetUrl.toLowerCase().includes('chunks=') ||
+        targetUrl.toLowerCase().includes('playlist') ||
+        targetUrl.toLowerCase().includes('manifest'));
 
     const resHeaders = new Headers(corsHeaders);
     resHeaders.set('Access-Control-Allow-Origin', '*');
@@ -166,9 +196,16 @@ export default async (req: Request): Promise<Response> => {
       if (val) resHeaders.set(h, val);
     }
 
-    if (isM3U8 && req.method !== 'HEAD') {
+    if (couldBePlaylist && req.method !== 'HEAD') {
       const text = await upstreamRes.text();
-      if (text.trim().startsWith('#EXTM3U') || text.includes('#EXTINF') || text.includes('#EXT-X-STREAM-INF')) {
+      const trimmedHead = text.trim();
+
+      if (
+        trimmedHead.startsWith('#EXTM3U') ||
+        text.includes('#EXTINF') ||
+        text.includes('#EXT-X-STREAM-INF') ||
+        text.includes('#EXT-X-TARGETDURATION')
+      ) {
         const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const streamInfIdx = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
         const variantUrls = lines.filter((l) => !l.startsWith('#'));
@@ -207,14 +244,29 @@ export default async (req: Request): Promise<Response> => {
           status: 200,
           headers: resHeaders,
         });
+      } else {
+        resHeaders.set('Content-Type', contentType || 'text/plain; charset=utf-8');
+        return new Response(text, {
+          status: 200,
+          headers: resHeaders,
+        });
       }
     }
 
-    // Direct stream for TS segments, MP4, MKV
+    // Direct stream for TS segments, MP4, MKV, AES keys
     resHeaders.set('Content-Disposition', 'inline');
     resHeaders.set('Accept-Ranges', 'bytes');
 
-    if (contentType) {
+    if (isKeyRequest) {
+      resHeaders.set('Content-Type', 'application/octet-stream');
+    } else if (
+      targetUrl.endsWith('.ts') ||
+      targetUrl.includes('.ts?') ||
+      targetUrl.includes('_seg_') ||
+      targetUrl.includes('&segment=')
+    ) {
+      resHeaders.set('Content-Type', 'video/mp2t');
+    } else if (contentType) {
       if (
         contentType.includes('matroska') ||
         contentType.includes('mkv') ||
@@ -225,10 +277,10 @@ export default async (req: Request): Promise<Response> => {
       } else {
         resHeaders.set('Content-Type', contentType);
       }
-    } else if (targetUrl.endsWith('.ts') || targetUrl.includes('.ts?')) {
-      resHeaders.set('Content-Type', 'video/mp2t');
-    } else {
+    } else if (targetUrl.endsWith('.mp4')) {
       resHeaders.set('Content-Type', 'video/mp4');
+    } else {
+      resHeaders.set('Content-Type', 'video/mp2t');
     }
 
     return new Response(upstreamRes.body, {
